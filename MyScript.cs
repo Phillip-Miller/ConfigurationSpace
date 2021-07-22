@@ -202,8 +202,8 @@ class MyHinge //everything in here is in world space !!
 
     public Vector3 axis;
     public Vector3 anchor;
-    Vector3 axisPointA;
-    Vector3 axisPointB;
+    public Vector3 axisPointA;
+    public Vector3 axisPointB;
     public Polygon polygon1;
     public Polygon polygon2;
 
@@ -213,6 +213,7 @@ class MyHinge //everything in here is in world space !!
     public static List<Polygon> lockedFaces = new List<Polygon>();
     public GameObject go1;
     public GameObject go2;
+    
     public MyHinge(Polygon Polygon1, Polygon Polygon2,Vector3 axisPointA, Vector3 axisPointB)
     {
         polygon1 = Polygon1;
@@ -226,11 +227,37 @@ class MyHinge //everything in here is in world space !!
         
         calculateOrthogonalHinge();
     }
+    private GameObject getTranslateParent(bool firstGo)
+    {
 
+        GameObject child;
+        if (firstGo)
+        {
+            if (this.go1.transform.parent != null) {
+                
+                return this.go1.transform.parent.gameObject;
+            }
+            child = this.go1;
+
+        }
+        else 
+        { 
+            if (this.go2.transform.parent != null)
+                return this.go2.transform.parent.gameObject;
+            child = this.go2;
+        }
+        Debug.Log("HERE");
+        GameObject parent = new GameObject("PARENT");
+        parent.transform.Translate(this.anchor);
+        child.transform.parent = parent.transform;
+     
+        return parent;
+    }
     private void calculateOrthogonalHinge() //want to find orthogonal line between axis and point on polygon. Might want to calculate the axis inside of this function
     {
         this.orthogonalV1 = this.polygon1.getMiddle() - this.anchor;
         this.orthogonalV2 = this.polygon2.getMiddle() - this.anchor;
+        
        
     }
 
@@ -258,32 +285,39 @@ class MyHinge //everything in here is in world space !!
     /// Moves GO's, updates 
     /// </summary>
     /// <param name="rad"></param>
-    public void Update(float deg) //will attempt to implement the observer design pattern
+    public void updateAngle(float deg) //will attempt to implement the observer design pattern
     {
         if (lockedFaces.Contains(this.polygon1))
         {
-            RotateAroundPivot(this.go2, deg);
+            Debug.Log("Locked Face1");
+            RotateAroundPivot(this.getTranslateParent(false), deg);
         }
         if (lockedFaces.Contains(this.polygon2))
         {
-            RotateAroundPivot(this.go1, deg);
+            Debug.Log("Locked Face2");
+            RotateAroundPivot(this.getTranslateParent(true), deg);
         }
         else
         {
-            RotateAroundPivot(this.go1, deg/2);
-            RotateAroundPivot(this.go2, deg/2);
+            //@FIXME one of these is rotating the wrong direction
+            RotateAroundPivot(this.getTranslateParent(true), deg/2);
+            RotateAroundPivot( this.getTranslateParent(false),deg/2);
         }
     }
-    private void RotateAroundPivot(GameObject myGo,float deg)
-    {
-        GameObject go = new GameObject();
-        go.transform.Translate(this.anchor);
-        myGo.transform.parent = go.transform;
-        go.transform.Rotate(this.axis, deg);
-        myGo.transform.parent = null;
-        UnityEngine.Object.Destroy(go);
-    }
+    
+    private void RotateAroundPivot(GameObject parent, float deg)
+    { 
 
+        parent.transform.Rotate(this.axis, deg);
+      
+    }
+    public void TranslateHinge(float distance)
+    {
+        Debug.DrawRay(this.anchor, ((orthogonalV1 + orthogonalV2) / 2).normalized, Color.blue, 100f);
+        //avg both angle vectors to get middle vector, make into unit vector and then multiply by the distance
+        this.getTranslateParent(true).transform.Translate(((orthogonalV1 + orthogonalV2) / 2).normalized * distance,Space.World);
+        this.getTranslateParent(false).transform.Translate(((orthogonalV1 + orthogonalV2) / 2).normalized * distance,Space.World);
+    }
     public void Draw()
     {
         Debug.DrawLine(axisPointA, axisPointB, Color.red, 100f);
@@ -303,7 +337,7 @@ public class MyScript : MonoBehaviour
     public double sideArea;
     private bool hideColliders = true;
     private bool hideOutside = false;
-    public bool updateHingeMotion;
+    private double squareLength;
     private List<Polygon> lockedPolygons = new List<Polygon>();
     private List<GameObject> ColliderGoList;
 
@@ -312,50 +346,29 @@ public class MyScript : MonoBehaviour
 
     void Start()
     {
-        //Physics settings
-        Physics.defaultSolverIterations = 60;
-        Time.maximumDeltaTime = 5; //seconds
-        Time.fixedDeltaTime = 0.001F;
-        Physics.defaultContactOffset = .05F; //default is .01
+        
 
         parentModel = this.gameObject;
         GameObject[] allGameObj = FindAllGameObjects(); //find and curate list of all viewable faces
-        GameObject [] allColliderGameObjects = new GameObject[allGameObj.Length]; //empty list of colliders that the allGameObj will be parented under
         ConfigureGameObjects(allGameObj,true);//Randomly assigns colour
         List<Polygon> myPolygons = FindFacePolygons(allGameObj,null);//finds all outside edges of shape using shared edges and area methods
-        FindMatchingEdges(ref myPolygons); //edits ref myPolygons to just the inner polygons by finding the matching edges
-
-        CreateColliderPlanes(ref myPolygons); //Create my collider planes from the myPolygons and reassigns the game object attached to my polygon
-        for (int i = 0; i < myPolygons.Count; i++)
-        {
-            allColliderGameObjects[i] = myPolygons[i].EdgeList[0].go;
-        } //filling up the allColliderGameObject list
-        ConfigureGameObjects(allColliderGameObjects,false); //configure but for physics system, no colouring (could change this to include coloring)
+        List<Edge[]> matchingEdges = FindMatchingEdges(ref myPolygons); //edits ref myPolygons to just the inner polygons by finding the matching edges
+        foreach (GameObject go in allGameObj)
+            go.transform.parent = null;
         
-        myPolygons = FindFacePolygons(allColliderGameObjects,myPolygons); //@fixme need help for when each shape has different number of sides. @TODO:
-        List<Edge[]> matchingEdges = FindMatchingEdges(ref myPolygons); //@FIXME somehow this is not working on the second iteration
-        
-        foreach(GameObject go in allColliderGameObjects) //bool hide colliders
-        {
-            go.GetComponent<MeshRenderer>().forceRenderingOff = hideColliders;
-        }
-        foreach (GameObject go in allGameObj)  //bool hide faces
-        {
-            go.SetActive(!hideOutside);
-        }
-        print("Number of face colliders detected: " + allColliderGameObjects.Length);
         print("Number of hinges: " + matchingEdges.Count);
         print(myPolygons[0].EdgeList.Count + "-gon");
 
-        ColliderGoList = new List<GameObject>(allColliderGameObjects);
-        gameObjectDestroyed = false;        
 
+        squareLength = Math.Abs((uniqueHinges[0].axisPointA - uniqueHinges[0].axisPointB).magnitude); ///@FIXME magnitude is distributive right
     }
     void Update()
     {
         
         //need some way of locking hinge and going around in a circle...adjusting the next hinge after I think
-        UpdateAngleA(.01f);
+        
+        
+        UpdateAngleC(.01f);
 
 
 
@@ -363,7 +376,7 @@ public class MyScript : MonoBehaviour
         
 
     }
-    void UpdateAngleA(float deg) //@TODO @FIXME More math to be done
+    void UpdateAngleC(float deg) //distance apart is 2*length*cos*pheta -> differenciate so distance/dpheta = length*-sinpheta
     {
         List<MyHinge> interiorAngles = new List<MyHinge>();
         interiorAngles.Add(uniqueHinges[0]);
@@ -375,7 +388,10 @@ public class MyScript : MonoBehaviour
         }
         foreach(MyHinge hinge in interiorAngles)
         {
-            hinge.Update(deg);
+            hinge.updateAngle(deg); //this is causing movement somehow
+            double translateAmmount = 1 * squareLength * Math.Sin(Mathf.Deg2Rad*deg); //needs to be delta deg
+            float translateFloat = (float)translateAmmount;
+           // hinge.translateHinge(translateFloat);
             hinge.Draw();
         }
 
@@ -400,6 +416,7 @@ public class MyScript : MonoBehaviour
                 GameObject child = parentModel.transform.GetChild(i).gameObject;
                 gameObjectArray[i] = child;
             }
+
             return gameObjectArray;
         }
 
@@ -408,6 +425,7 @@ public class MyScript : MonoBehaviour
         for (int i = 0; i < childCount; i++)
         {
             gameObjectArray[i] = parentModel.transform.GetChild(i).transform.GetChild(0).transform.GetChild(0).gameObject;
+            
         }
         return gameObjectArray;
         
@@ -423,29 +441,28 @@ public class MyScript : MonoBehaviour
 
         foreach (GameObject go in allGameObjects)
         {
-            if (!face)
-            {
-                Rigidbody rb = go.GetComponent<Rigidbody>();
-                rb.useGravity = useGravity;
-                rb.isKinematic = first;
-                rb.velocity = Vector3.zero;
-                rb.angularVelocity = Vector3.zero;
-                if(!first)
-                    rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-                else
-                    rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            //if (!face)
+            //{
+            //    Rigidbody rb = go.GetComponent<Rigidbody>();
+            //    rb.useGravity = useGravity;
+            //    rb.isKinematic = first;
+            //    rb.velocity = Vector3.zero;
+            //    rb.angularVelocity = Vector3.zero;
+            //    if(!first)
+            //        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            //    else
+            //        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
                 
-                MeshCollider c = go.GetComponent<MeshCollider>();
-                c.convex = true;
-                c.enabled = true;
-                
-                first = false;
-            }
-            else
-            {
-                var colorChange = go.GetComponent<Renderer>(); //randomizing the color attached to get easy to view multicolor faces
-                colorChange.material.SetColor("_Color", UnityEngine.Random.ColorHSV(0f, 1f, 1f, 1f, 0.5f, 1f));
-            }
+            //    MeshCollider c = go.GetComponent<MeshCollider>();
+            //    c.convex = true;
+            //    c.enabled = true;
+              
+            //    first = false;
+            //}
+            
+            var colorChange = go.GetComponent<Renderer>(); //randomizing the color attached to get easy to view multicolor faces
+            colorChange.material.SetColor("_Color", UnityEngine.Random.ColorHSV(0f, 1f, 1f, 1f, 0.5f, 1f));
+            
         }
     }
     
@@ -649,81 +666,7 @@ public class MyScript : MonoBehaviour
         realPolygons = insideFacePolygons.ToList();
         return returnList;
     }
-    /// <summary>
-    /// Creates planes, enables mesh colliders, sets them in the correct place, edits the myPolygons to refer to the collider now
-    /// </summary>
-    /// <param name="myPolygons"></param>
-     void CreateColliderPlanes(ref List<Polygon> myPolygons) // List<Edge> edges
-     {
-
-        foreach (Polygon p in myPolygons) {
-            List<Vector3> verticiesList = p.getVerticies();
-            int[] triangles = CreateTriangleArray(p,ref verticiesList).ToArray();
-            Vector3[] vertices = p.getVerticies().ToArray();
-            GameObject colliderGo = new GameObject("Mesh", typeof(MeshFilter),typeof(MeshCollider),typeof(MeshRenderer),typeof(Rigidbody));
-            var newChild = p.EdgeList[0].go.transform;
-
-            Mesh mesh = new Mesh();
-            colliderGo.GetComponent<MeshFilter>().mesh = mesh;
-            colliderGo.GetComponent<MeshCollider>().sharedMesh = mesh;
-            mesh.vertices = vertices;
-            mesh.triangles = triangles;
-
-            foreach(Edge e in p)
-            {
-                e.go = colliderGo;
-            }
-            newChild.transform.SetParent(colliderGo.transform);//gets rid of parent
-        }
-     }
-
-    List<int> CreateTriangleArray(Polygon p,ref List<Vector3> verticies) //Assuming winding order does not matter for colliders -- if needed uncomment out the flipped code to make figure double sided
-    {
-        List<Triangle> tList = p.createTriangles();
-        List<int> indexList = new List<int>();
-        int indexTracker = 0;
-        foreach (Triangle t in tList)
-        {
-            foreach(Edge e in t)
-            {
-                indexList.Add(verticies.IndexOf(e.vertex1)); 
-                
-                indexTracker++;
-            }
-        }
-        p.numTriangles = tList.Count;
-        //Want my code to ignore everything in the list after these triangles in order to make hinges only on the plane
-
-        //I want to extrude mesh outward and sqew inwards into 4 sided figure
-        Vector3 planeInterior = Vector3.zero;
-        foreach (Vector3 v in verticies)
-            planeInterior += v;
-        planeInterior /= verticies.Count; 
-
-        Vector3 shapeInterior = Vector3.zero;
-        foreach (Vector3 v in p.EdgeList[0].go.GetComponent<MeshFilter>().mesh.vertices) 
-            shapeInterior += v;
-        shapeInterior /= p.EdgeList[0].go.GetComponent<MeshFilter>().mesh.vertices.Length;
-        float extrudeDistance = .005F;
-        Vector3 extrudeDirection = (shapeInterior - planeInterior).normalized; //@FIXME I want to go in diretion of shape interior so I think I subtract
-        verticies.Add(planeInterior + extrudeDirection * extrudeDistance);
-        int extrudeVertexIndex = verticies.IndexOf(planeInterior + extrudeDirection * extrudeDistance);
-        
-        foreach(Edge e in p)
-        {
-            indexList.Add(verticies.IndexOf(e.vertex1));
-            indexList.Add(verticies.IndexOf(e.vertex2));
-            indexList.Add(extrudeVertexIndex);
-        }
-        
-        int[] flipped = new int[indexList.Count];
-        Array.Copy(indexList.ToArray(), flipped, indexList.Count);
-        Array.Reverse(flipped,0,indexList.Count);
-        var combined = new int[2*indexList.Count];
-        indexList.CopyTo(combined, 0);
-        flipped.CopyTo(combined, indexList.Count);
-        return indexList;
-    }
+   
 
     double CalculateVolume(List<Triangle> faces)
     {
