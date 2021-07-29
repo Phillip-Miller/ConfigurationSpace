@@ -188,7 +188,7 @@ class Polygon : IEnumerable
         return GetEnumerator();
     }
 
-    public override bool Equals(object obj) //@FIXME not tested yet should compare if all verticies are the same and same ammount of verts
+    public override bool Equals(object obj) 
     {
         Polygon p = (Polygon) obj;
         return this.getVerticies().All(p.getVerticies().Contains) && this.getVerticies().Count == p.getVerticies().Count; 
@@ -243,10 +243,56 @@ class MyHinge //everything in here is in world space !!
         this.updatedAngle = this.GetAngle();
         this.moveDirection = ((orthogonalV1 + orthogonalV2) / 2).normalized;
     }
-    private GameObject getTranslateParent(bool firstGo)
+    public void updateGo()
+    {
+        this.go1 = polygon1.EdgeList[0].go;
+        this.go2 = polygon2.EdgeList[0].go;
+
+    }
+        
+    private GameObject GetTranslateParent(bool firstGo, Vector3 altAnchor) //for use in rotating around a different gameObject's hinge...apears the defualt values must be compile time constant so I will overload this function
+    {
+        
+        //@TODO: need to move the other one back in addition to just adjusting the angle
+        GameObject child;
+        if (firstGo)
+        {
+            if (this.go1.transform.parent != null && this.go1.transform.parent.name.Equals("TrackingParent"))
+            {
+
+                return this.go1.transform.parent.gameObject;
+            }
+            child = this.go1;
+
+        }
+        else
+        {
+            if (this.go2.transform.parent != null && this.go2.transform.parent.name.Equals("TrackingParent"))
+                return this.go2.transform.parent.gameObject;
+            child = this.go2;
+        }
+        GameObject parent = new GameObject("TrackingParent");
+        parent.transform.Translate(altAnchor);
+        child.transform.parent = parent.transform;
+        return parent; //TODO: this could cause issues with a gameObject having two parents
+    }
+    private GameObject GetTranslateParent(bool firstGo)
     {
 
         GameObject child;
+        GameObject oldParent;
+        if (this.go1.transform.parent != null && this.go1.transform.parent.name != "TrackingParent") 
+        {
+            oldParent = this.go1.transform.parent.gameObject;
+            this.go1.transform.parent = null;
+            GameObject.Destroy(oldParent);
+        }
+        if (this.go2.transform.parent != null && this.go2.transform.parent.name != "TrackingParent")
+        {
+            oldParent = this.go2.transform.parent.gameObject;
+            this.go2.transform.parent = null;
+            GameObject.Destroy(oldParent);
+        }
         if (firstGo)
         {
             if (this.go1.transform.parent != null) {
@@ -321,19 +367,34 @@ class MyHinge //everything in here is in world space !!
         }
     }
     
-    private void RotateAroundPivot(bool firstGo, float deg) //@FIXME need to update the orthogonal v1 and orthogonal v2 here
+    private void RotateAroundPivot(bool firstGo, float deg) 
     {
-        //update hinge.connectedHinges here! @TODO
-        if(this.go1.name.Contains("abcd") || this.go2.name.Contains("abcd"))
-        {
-            //this.connectedHinges.....
-        }
+        //update hinge.connectedHinges here! @ TODO: something @FIXME 
+        
 
             //you have to track the flaps here
-        GameObject parent = this.getTranslateParent(firstGo);
+        GameObject parent = this.GetTranslateParent(firstGo);
 
         parent.transform.Rotate(this.axis, deg);
         Quaternion rotation = Quaternion.AngleAxis(deg, this.axis);
+
+        if ((this.go1.name.Contains("abcd") || this.go2.name.Contains("abcd")) && firstGo) //added first go to make sure this only gets executed one time
+        {
+            foreach (MyHinge hinge in this.connectedHinges) //connectedHinges is having some wonky behavior
+            {
+                //@TODO: update the orthogonal values when rotating this to match
+                bool connectedFirstGo = !this.go1.name.Contains("abcd"); //we want to move the non abcd face (flapA and flapB)
+                hinge.GetTranslateParent(connectedFirstGo, this.anchor).transform.Rotate(this.axis, -deg); //@FIXME not sure why this has to be negative
+                if (connectedFirstGo) //update ortho
+                {
+                    hinge.orthogonalV1 = rotation.normalized * hinge.orthogonalV1; //order matters 
+                }
+                else
+                {
+                    hinge.orthogonalV2 = rotation.normalized * hinge.orthogonalV1; //order matters 
+                }
+            }
+        }
 
         if (firstGo) //update ortho
         {
@@ -344,9 +405,12 @@ class MyHinge //everything in here is in world space !!
             orthogonalV2 = rotation.normalized * orthogonalV1; //order matters 
         }
 
+        
+
     }
-    public void TranslateHinge(float dX)
+    public void TranslateHinge(float dX) //couple things wrong here you are translating whole hinge not just one side, the tracking needs to be done somewhere else, might need overloaded translate parent, this.move direction is completely broken
     {
+        
         dX *= -1;
         orthogonalV1 += ((orthogonalV1 + orthogonalV2) / 2).normalized * dX; 
         orthogonalV2 += ((orthogonalV2 + orthogonalV2) / 2).normalized * dX;
@@ -354,16 +418,30 @@ class MyHinge //everything in here is in world space !!
         this.axisPointB += this.moveDirection * dX;
         this.axis = axisPointA - axisPointB; //should I actually be subtracting here
         this.anchor = (axisPointA + axisPointB) / 2;
+        this.GetTranslateParent(true).transform.Translate(this.moveDirection * dX, Space.World);
+        this.GetTranslateParent(false).transform.Translate(this.moveDirection * dX, Space.World);
+        if (this.go1.name.Contains("a") || this.go2.name.Contains("a"))
+        { //then we will have to adjust other hinges
 
-
-        Debug.DrawRay(this.anchor, orthogonalV1, Color.yellow, 10f);
-        this.getTranslateParent(true).transform.Translate(this.moveDirection * dX,Space.World);
-        this.getTranslateParent(false).transform.Translate(this.moveDirection * dX,Space.World);
+            foreach (MyHinge hinge in this.connectedHinges)
+            {
+                orthogonalV1 += this.moveDirection * dX;
+                orthogonalV2 += this.moveDirection * dX;
+                hinge.axisPointA += this.moveDirection * dX;
+                hinge.axisPointB += this.moveDirection * dX;
+                hinge.axis = axisPointA - axisPointB; //should I actually be subtracting here
+                hinge.anchor = (axisPointA + axisPointB) / 2;
+                bool first = !hinge.go1.name.Equals("abcd");
+                hinge.GetTranslateParent(first,this.anchor).transform.Translate(this.moveDirection * dX, Space.World);
+            }
+            
+        }
     }
+
     /// <summary>
     /// Draws in green
     /// </summary>
-    public void Draw()
+    public void Draw() //need to update these points more often
     {
         Debug.DrawLine(axisPointA, axisPointB, Color.green, 5f);
     }
@@ -383,15 +461,14 @@ class MyHinge //everything in here is in world space !!
 /// </summary>
 public class MyScript : MonoBehaviour
 {
-    List<MyHinge> uniqueHinges; 
+    List<MyHinge> uniqueHinges;
     private GameObject parentModel;
     public bool autoUnpack;
-    public bool useGravity; 
-    private double hingeTolerance = .001; 
+    public bool useGravity;
+    private double hingeTolerance = .001;
     public double sideArea;
-    
+
     private double squareLength;
-    private List<Polygon> lockedPolygons = new List<Polygon>();
     private List<GameObject> ColliderGoList;
     GameObject[] allGameObj;
     List<MyHinge> interiorHinges = new List<MyHinge>();
@@ -408,17 +485,20 @@ public class MyScript : MonoBehaviour
 
     void Start()
     {
-
+        //myPlygon changes go but hinges are made before that....
 
         parentModel = this.gameObject;
         allGameObj = FindAllGameObjects(); //find and curate list of all viewable faces
         ConfigureGameObjects(allGameObj);//Randomly assigns colour
         List<Polygon> myPolygons = FindFacePolygons(allGameObj, null);//finds all outside edges of shape using shared edges and area methods
-
         List<Edge[]> matchingEdges = FindMatchingEdges(ref myPolygons); //edits ref myPolygons to just the inner polygons by finding the matching edges
         foreach (GameObject go in allGameObj)
             go.transform.parent = null;
-
+        reSizeShape(ref myPolygons);
+        foreach (MyHinge hinge in uniqueHinges)
+        {
+            hinge.updateGo();
+        }
         print("Number of hinges: " + matchingEdges.Count);
         print(myPolygons[0].EdgeList.Count + "-gon");
 
@@ -429,15 +509,19 @@ public class MyScript : MonoBehaviour
         Time.fixedDeltaTime = 0.01f;
         //c and angle across from it
         hingeC = uniqueHinges.Where(hinge => hinge.go1.name.Contains("c") && hinge.go2.name.Contains("c")).First(); //hopefully there is only 1
+        flapA = uniqueHinges.Where(hinge => hinge.go1.name.Contains("a") && hinge.go2.name.Contains("a")).First();
+        flapB = uniqueHinges.Where(hinge => hinge.go1.name.Contains("b") && hinge.go2.name.Contains("b")).First();
+        hingeD = uniqueHinges.Where(hinge => hinge.go1.name.Contains("d") && hinge.go2.name.Contains("d")).First();
+
         interiorHinges.Add(hingeC);
         foreach (MyHinge hinge in uniqueHinges)
         {
-            if (hinge.go1.name.Contains("opp") &&  hinge.go2.name.Contains("opp")) //helper hinge...not getting triggered
+            if (hinge.go1.name.Contains("opp") && hinge.go2.name.Contains("opp")) //helper hinge...not getting triggered
             {
                 interiorHinges.Add(hinge);
             }
         }
-
+        //@FIXME adding nulls here
         hingeC.connectedHinges.Add(flapA);
         hingeC.connectedHinges.Add(flapB);
 
@@ -447,19 +531,41 @@ public class MyScript : MonoBehaviour
     }
     private void Update()
     {
-        
+
     }
     void FixedUpdate()
     {
+        foreach (MyHinge item in uniqueHinges)
+        {
+            item.Draw();
+        }
 
         //move bound condition logic into here to decide wheather to call angleD or angle C
-        //UpdateAngleC(.1f);
+       // UpdateAngleA(.1f);
         //only called if C is at zero
-        //UpdateAngleD(.1f);
+        UpdateAngleC(.1f);
 
     }
+    public void UpdateAngleA(float deg)
+    {
+        UpdateFlap( deg, flapA);
+    }
+    public void UpdateAngleB(float deg)
+    {
+        UpdateFlap( deg, flapB);
+    }
+    private void UpdateFlap(float deg, MyHinge hinge)
+    {
+        //figure out which side
+        if (hinge.go1.name.Equals("abcd"))
+            MyHinge.lockedFaces.Add(hinge.polygon1);
+        else
+            MyHinge.lockedFaces.Add(hinge.polygon2);
+        hinge.updateAngle(deg);
+        MyHinge.lockedFaces.RemoveAt(MyHinge.lockedFaces.Count - 1); //removes the polyygon we just added
 
-    private void UpdateAngleD(float deg)
+    }
+    void UpdateAngleD(float deg)
     {
         hingeC.updateAngle(-deg);
         interiorHinges[1].updateAngle(deg);
@@ -472,14 +578,13 @@ public class MyScript : MonoBehaviour
     //if the angle of c is either 0 or 180 then we dont want to call the translate function
     //I will have interior angles[0] always be c
     {
-        //jumping to movement after 180 (changes bounds from 1,179 to 0,180 causes movement!! @FIXME @TODO maybe try commenting this all out
-
+//TODO: fix logic here and put in main update instead of in angle C
         float angleC = hingeC.updatedAngle;
-        print(angleC);
-        if (angleC + deg > 359) //coment this all out later need to figure out why the hinge is not tracking correctly
+        //print(angleC);
+        if (angleC + deg > 360) 
         {
             print("BOUND CONDITION 1");
-            deg = 359 - angleC;
+            deg = 360 - angleC;
         }
         if (angleC + deg < 0)
         {
@@ -502,10 +607,10 @@ public class MyScript : MonoBehaviour
                 if (angleC > 1 && angleC < 179)
                 {
                     hinge.TranslateHinge(dX);
+                    print("HERE");
                 }
-                hinge.Draw();
             }
-        }        
+        }
         return interiorHinges[0].updatedAngle;
     }
 
@@ -703,6 +808,59 @@ public class MyScript : MonoBehaviour
         }
         realPolygons = insideFacePolygons.ToList();
         return returnList;
+    }
+    void reSizeShape(ref List<Polygon> myPolygons) // List<Edge> edges
+    {
+        print(myPolygons.Count);
+        foreach (Polygon p in myPolygons)
+        {
+            List<Vector3> verticiesList = p.getVerticies();
+            print("verts: "+ verticiesList.Count);
+            int[] triangles = CreateTriangleArray(p,verticiesList).ToArray();
+            Vector3[] vertices = p.getVerticies().ToArray();
+            GameObject newGo = new GameObject(p.EdgeList[0].go.name, typeof(MeshFilter), typeof(MeshRenderer));
+            var oldPlace = p.EdgeList[0].go;
+            Mesh mesh = new Mesh();
+            newGo.GetComponent<MeshFilter>().mesh = mesh;
+            mesh.vertices = vertices;
+            mesh.triangles = triangles;
+            print(triangles);
+            foreach (Edge e in p)
+            {
+                e.go = newGo;
+            }
+            var colorChange = newGo.GetComponent<Renderer>(); //randomizing the color attached to get easy to view multicolor faces
+            colorChange.material.SetColor("_Color", UnityEngine.Random.ColorHSV(0f, 1f, 1f, 1f, 0.5f, 1f));
+            Destroy(oldPlace);
+
+        }
+    }
+
+    List<int> CreateTriangleArray(Polygon p, List<Vector3> verticies) //Assuming winding order does not matter for colliders -- if needed uncomment out the flipped code to make figure double sided
+    {
+        List<Triangle> tList = p.createTriangles();
+        List<int> indexList = new List<int>();
+        int indexTracker = 0;
+        foreach (Triangle t in tList)
+        {
+            foreach (Edge e in t)
+            {
+                indexList.Add(verticies.IndexOf(e.vertex1));
+
+                indexTracker++;
+            }
+        }
+
+        //double sided does not quite appear to be working properly as of yet @FIXME
+
+        int[] flipped = new int[indexList.Count];
+        Array.Copy(indexList.ToArray(), flipped, indexList.Count);
+        Array.Reverse(flipped, 0, indexList.Count);
+        var combined = new int[2 * indexList.Count];
+        indexList.CopyTo(combined, 0);
+        flipped.CopyTo(combined, indexList.Count);
+        
+        return combined.ToList<int>();
     }
 
     double CalculateVolume(List<Triangle> faces)
