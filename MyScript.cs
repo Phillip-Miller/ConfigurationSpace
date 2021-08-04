@@ -5,6 +5,12 @@ using System.Linq;
 using UnityEngine;
 /* No Hinge Pure Math Model
  * Set square with 90 degree angles and faces with non 90
+ * Angle D will be tracked as inside and converted upon inputs if needed
+ * 
+ * TODO LIST
+ * not going to bother tracking the flap hinges and redrawing them correctly 
+ * create fixed colors for each piece -- add different colors for inside and outside( light vs dark)
+ * will need to track the 
  * @Author Phillip MIller
  * @Date 6/21/2021
  */
@@ -51,6 +57,10 @@ class Edge //vertex should be a world vertex
     public override string ToString()
     {
         return base.ToString() + this.vertex1.ToString() + this.vertex2.ToString();
+    }
+    public void Draw()
+    {
+        Debug.DrawLine(vertex1, vertex2, Color.red, 50f);
     }
 }
 class Triangle : IEnumerable<Edge>
@@ -203,6 +213,12 @@ class Polygon : IEnumerable
     {
         return base.ToString();
     }
+    public void Draw()
+    {
+        foreach(Edge edge in EdgeList){
+            edge.Draw();
+        }
+    }
 }
 class MyHinge //everything in here is in world space !! 
     //hinge normal 1 and 2 will be continously updated as go1, and go2 are rotated respectively
@@ -249,17 +265,20 @@ class MyHinge //everything in here is in world space !!
         this.go2 = polygon2.EdgeList[0].go;
 
     }
-        
-    private GameObject GetTranslateParent(bool firstGo, Vector3 altAnchor) //for use in rotating around a different gameObject's hinge...apears the defualt values must be compile time constant so I will overload this function
+    /// <summary>
+    /// in order to rotate to rotate around someone elses anchor
+    /// </summary>
+    /// <param name="firstGo"></param>
+    /// <param name="altAnchor"></param> anchor of another game object you wish to rotate around 
+    /// <returns></returns>
+    private GameObject GetTranslateParent(bool firstGo, Vector3 altAnchor) //for use in rotating around a different gameObject's hinge
     {
         
-        //@TODO: need to move the other one back in addition to just adjusting the angle
         GameObject child;
         if (firstGo)
         {
             if (this.go1.transform.parent != null && this.go1.transform.parent.name.Equals("TrackingParent"))
-            {
-
+            { 
                 return this.go1.transform.parent.gameObject;
             }
             child = this.go1;
@@ -276,7 +295,7 @@ class MyHinge //everything in here is in world space !!
         child.transform.parent = parent.transform;
         return parent; //TODO: this could cause issues with a gameObject having two parents
     }
-    private GameObject GetTranslateParent(bool firstGo)
+    private GameObject GetTranslateParent(bool firstGo) //@FIXME source of clipping errors
     {
 
         GameObject child;
@@ -352,39 +371,38 @@ class MyHinge //everything in here is in world space !!
 
         if (lockedFaces.Contains(this.polygon1))
         {
+            
             Debug.Log("Locked Face1");
             RotateAroundPivot(false, deg);
         }
-        if (lockedFaces.Contains(this.polygon2))
+        else if (lockedFaces.Contains(this.polygon2))
         {
             Debug.Log("Locked Face2");
             RotateAroundPivot(true, deg);
         }
         else
         {
+            
             RotateAroundPivot(true, deg/2);
             RotateAroundPivot(false,-1*deg/2);
         }
     }
     
-    private void RotateAroundPivot(bool firstGo, float deg) 
-    {
-        //update hinge.connectedHinges here! @ TODO: something @FIXME 
-        
+    private void RotateAroundPivot(bool firstGo, float deg,bool updateValueOnly = false) 
+    {        
 
             //you have to track the flaps here
         GameObject parent = this.GetTranslateParent(firstGo);
-
         parent.transform.Rotate(this.axis, deg);
         Quaternion rotation = Quaternion.AngleAxis(deg, this.axis);
 
         if ((this.go1.name.Contains("abcd") || this.go2.name.Contains("abcd")) && firstGo) //added first go to make sure this only gets executed one time
         {
-            foreach (MyHinge hinge in this.connectedHinges) //connectedHinges is having some wonky behavior
+            foreach (MyHinge hinge in this.connectedHinges)
             {
-                //@TODO: update the orthogonal values when rotating this to match
+
                 bool connectedFirstGo = !this.go1.name.Contains("abcd"); //we want to move the non abcd face (flapA and flapB)
-                hinge.GetTranslateParent(connectedFirstGo, this.anchor).transform.Rotate(this.axis, -deg); //@FIXME not sure why this has to be negative
+                hinge.GetTranslateParent(connectedFirstGo, this.anchor).transform.Rotate(this.axis, -deg); 
                 if (connectedFirstGo) //update ortho
                 {
                     hinge.orthogonalV1 = rotation.normalized * hinge.orthogonalV1; //order matters 
@@ -393,6 +411,7 @@ class MyHinge //everything in here is in world space !!
                 {
                     hinge.orthogonalV2 = rotation.normalized * hinge.orthogonalV1; //order matters 
                 }
+
             }
         }
 
@@ -408,7 +427,7 @@ class MyHinge //everything in here is in world space !!
         
 
     }
-    public void TranslateHinge(float dX) //couple things wrong here you are translating whole hinge not just one side, the tracking needs to be done somewhere else, might need overloaded translate parent, this.move direction is completely broken
+    public void TranslateHinge(float dX, bool updateValueOnly) 
     {
         
         dX *= -1;
@@ -418,6 +437,8 @@ class MyHinge //everything in here is in world space !!
         this.axisPointB += this.moveDirection * dX;
         this.axis = axisPointA - axisPointB; //should I actually be subtracting here
         this.anchor = (axisPointA + axisPointB) / 2;
+        if (updateValueOnly)
+            return;
         this.GetTranslateParent(true).transform.Translate(this.moveDirection * dX, Space.World);
         this.GetTranslateParent(false).transform.Translate(this.moveDirection * dX, Space.World);
         if (this.go1.name.Contains("a") || this.go2.name.Contains("a"))
@@ -443,7 +464,7 @@ class MyHinge //everything in here is in world space !!
     /// </summary>
     public void Draw() //need to update these points more often
     {
-        Debug.DrawLine(axisPointA, axisPointB, Color.green, 5f);
+        Debug.DrawLine(axisPointA, axisPointB, Color.green, 20f);
     }
 
     public override int GetHashCode()
@@ -465,6 +486,11 @@ public class MyScript : MonoBehaviour
     private GameObject parentModel;
     public bool autoUnpack;
     public bool useGravity;
+    public float userAngleD;
+    public float userAngleC;
+    public float userAngleA;
+    public float userAngleB;
+
     private double hingeTolerance = .001;
     public double sideArea;
 
@@ -472,12 +498,20 @@ public class MyScript : MonoBehaviour
     private List<GameObject> ColliderGoList;
     GameObject[] allGameObj;
     List<MyHinge> interiorHinges = new List<MyHinge>();
+    List<MyHinge> DandOppHinges = new List<MyHinge>();
     MyHinge flapA;
     MyHinge flapB;
     MyHinge hingeC;
     MyHinge hingeD;
+    GameObject faceA;
+    GameObject faceB;
+    GameObject faceC;
+    GameObject faceDandOpp;
+    GameObject faceABCD;
+    GameObject faceOpp;
 
-    public float degTracker;
+    List<GameObject> myStack1 = new List<GameObject>(); //the stack that the flaps can be added to
+    List<GameObject> myStack2 = new List<GameObject>();
     [System.NonSerialized]
     public bool gameObjectDestroyed;
 
@@ -489,18 +523,16 @@ public class MyScript : MonoBehaviour
 
         parentModel = this.gameObject;
         allGameObj = FindAllGameObjects(); //find and curate list of all viewable faces
-        ConfigureGameObjects(allGameObj);//Randomly assigns colour
         List<Polygon> myPolygons = FindFacePolygons(allGameObj, null);//finds all outside edges of shape using shared edges and area methods
         List<Edge[]> matchingEdges = FindMatchingEdges(ref myPolygons); //edits ref myPolygons to just the inner polygons by finding the matching edges
         foreach (GameObject go in allGameObj)
             go.transform.parent = null;
-        reSizeShape(ref myPolygons);
+        ReSizeShape(ref myPolygons);
         foreach (MyHinge hinge in uniqueHinges)
         {
             hinge.updateGo();
         }
-        print("Number of hinges: " + matchingEdges.Count);
-        print(myPolygons[0].EdgeList.Count + "-gon");
+        
 
 
 
@@ -521,30 +553,36 @@ public class MyScript : MonoBehaviour
                 interiorHinges.Add(hinge);
             }
         }
-        //@FIXME adding nulls here
+
+        DandOppHinges.Add(hingeD);
+        foreach (MyHinge hinge in uniqueHinges)
+        {
+            if (hinge.go1.name.Equals("opp") && hinge.go2.name.Equals("c") || hinge.go1.name.Equals("c") && hinge.go2.name.Equals("opp")) //helper hinge...not getting triggered
+            {
+                DandOppHinges.Add(hinge);
+            }
+        }
         hingeC.connectedHinges.Add(flapA);
         hingeC.connectedHinges.Add(flapB);
 
 
 
+        //UpdateAngleA(userAngleA - flapA.updatedAngle);
+        //UpdateAngleB(userAngleB - flapB.updatedAngle);
+        //UpdateAngleC(userAngleC - hingeC.updatedAngle); //pass in a delta
+        //UpdateAngleD((360 - userAngleD) - hingeD.updatedAngle);
+        //UpdateAngleD(-hingeD.updatedAngle);
+
 
     }
+
     private void Update()
     {
-
     }
-    void FixedUpdate()
+    void FixedUpdate() //update commands are all in deltas (how much you want them to move)
     {
-        foreach (MyHinge item in uniqueHinges)
-        {
-            item.Draw();
-        }
-
-        //move bound condition logic into here to decide wheather to call angleD or angle C
-       // UpdateAngleA(.1f);
-        //only called if C is at zero
-        UpdateAngleC(.1f);
-
+        
+        
     }
     public void UpdateAngleA(float deg)
     {
@@ -565,55 +603,137 @@ public class MyScript : MonoBehaviour
         MyHinge.lockedFaces.RemoveAt(MyHinge.lockedFaces.Count - 1); //removes the polyygon we just added
 
     }
-    void UpdateAngleD(float deg)
+    public void UpdateAngleD(float deg)
     {
-        hingeC.updateAngle(-deg);
-        interiorHinges[1].updateAngle(deg);
+        if (hingeC.updatedAngle > 180)
+        {
+            Debug.Log("D Bound Condition");
+            //hingeC.updateAngle(-deg);
+            //interiorHinges[1].updateAngle(deg);
+        }
+        if (hingeC.updatedAngle == 0)//@FIXME need to track DandOpp[1] here and adjust hinge location
+        {
+            //Iff deg is pos that means opp will be on top
+            //neg deg means c will be on top
+            foreach(MyHinge hinge in DandOppHinges) //wnat to lock c and abcd
+            {
+                if (hinge.go1.name.Contains("c"))
+                    MyHinge.lockedFaces.Add(hinge.polygon1);
+                if (hinge.go2.name.Contains("c"))
+                    MyHinge.lockedFaces.Add(hinge.polygon2);
+            }
+            hingeD.updateAngle(deg);
+            DandOppHinges[1].updateAngle(deg);
+            MyHinge.lockedFaces.Clear();
+        }
+        else //otherwise d is directly dependent on C
+        {
+            UpdateAngleC(-deg);
+        }
+
         
     }
 
     float UpdateAngleC(float deg) //distance apart is length*cos(pheta/2)-> dX/dPheta = length*-sin(pheta/2) *.5
                                   //double translateAmmount = -1* (-.5 * squareLength * Math.Sin(Mathf.Deg2Rad*1*deg/2));
-
-    //if the angle of c is either 0 or 180 then we dont want to call the translate function
-    //I will have interior angles[0] always be c
+                                 //I will have interior angles[0] always be c
     {
-//TODO: fix logic here and put in main update instead of in angle C
+        
         float angleC = hingeC.updatedAngle;
-        //print(angleC);
-        if (angleC + deg > 360) 
-        {
-            print("BOUND CONDITION 1");
-            deg = 360 - angleC;
-        }
-        if (angleC + deg < 0)
+        if ((angleC == 0 && deg < 0) || (angleC == 360 && deg > 0)) //cant move
+            return 0;
+        if (angleC + deg < 0) //snap to 0
         {
             print("BOUND CONDITION 2");
             deg = 0 - angleC;
         }
-
-        if (angleC + deg > 180) //this rotation looks slightly wonky the edges are not perfectly lined up somehow
-        { //the interior hinges must preform opposite movements
-
+        if(angleC + deg > 360) //snap to 360
+        {
+            print("BOUND CONDITION 1");
+            deg = 360 - angleC;
+        }
+        if (angleC >= 180) // @ fixme need to track dandopp[1]
+        {
             hingeC.updateAngle(deg);
             interiorHinges[1].updateAngle(-deg);
         }
         else
         {
+            if (angleC + deg > 180) //only doing one type of movement at a time
+                deg = 180 - angleC;
             foreach (MyHinge hinge in interiorHinges)
             {
                 hinge.updateAngle(deg);
                 float dX = (float)(squareLength * Math.Cos(Mathf.Deg2Rad * hinge.updatedAngle / 2)) - (float)(squareLength * Math.Cos(Mathf.Deg2Rad * (hinge.updatedAngle - deg) / 2));
-                if (angleC > 1 && angleC < 179)
+                if (angleC > 0 && angleC < 180) //might be an unncesary if statement
                 {
-                    hinge.TranslateHinge(dX);
-                    print("HERE");
+                   hinge.TranslateHinge(dX, false);
+
+                }
+            }
+            foreach (MyHinge hinge in DandOppHinges)
+            {
+                float dX = (float)(squareLength * Math.Cos(Mathf.Deg2Rad * hinge.updatedAngle / 2)) - (float)(squareLength * Math.Cos(Mathf.Deg2Rad * (hinge.updatedAngle - deg) / 2));
+                if (angleC > 0 && angleC < 180)
+                {
+                    hinge.TranslateHinge(-dX, true);
+                }
+            }
+            float adjAngle = 180 - hingeC.updatedAngle; //@FIXME
+            hingeD.updatedAngle = adjAngle;
+            DandOppHinges[1].updatedAngle = adjAngle;
+        }       
+        
+        //ZOffsetFighting
+        if(myStack1 != null && (!myStack1.Contains(faceOpp) && !myStack1.Contains(faceC)))
+        {
+            if(hingeD.updatedAngle < 1) //then we assume it should be order 
+            {
+                if(hingeC.updatedAngle < 1)
+                {
+                    myStack1.Insert(0, faceOpp);
+                    myStack1.Insert(0, faceC);
+                }
+                if(hingeC.updatedAngle > 360)
+                {
+                    myStack1.Add(faceC);
+                    myStack1.Add(faceOpp);
                 }
             }
         }
         return interiorHinges[0].updatedAngle;
     }
+    void zOffset(List<GameObject> myStack1,List<GameObject> myStack2) // no flap functionality yet
+    {            
+        
+        
+        
+        
 
+        //if (hingeC.updatedAngle == 0 && hingeD.updatedAngle == 180)
+        //{
+
+        //}
+        //if (hingeC.updatedAngle == 0 && hingeD.updatedAngle == 0)
+        //{
+
+        //}
+        //if (hingeC.updatedAngle == 0 && hingeD.updatedAngle == 360)
+        //{
+
+        //}
+        //if (hingeC.updatedAngle == 180 && hingeD.updatedAngle == 0)
+        //{
+
+        //}
+        //if (hingeC.updatedAngle == 360 && hingeD.updatedAngle == 0)
+        //{
+
+
+
+
+
+    }
   
 
     /// <summary>
@@ -650,13 +770,14 @@ public class MyScript : MonoBehaviour
     /// <param name="allGameObjects"> allGameObject to be configured </param>
     void ConfigureGameObjects(GameObject[] allGameObjects) //TODO: have an assigned list that way colors dont get reused
     {
-        
+        print(allGameObjects.Length);
         //bool first = true; //we want the first one to be kinematic such that it stays in place (equivalent of grounding in fusion360)
-
-        foreach (GameObject go in allGameObjects)
-        { 
+        Color[] faceColors = new Color[] { new Color(231, 76, 60), new Color(155, 89, 182), new Color(41, 128, 185), new Color(26, 188, 156), new Color(243, 156, 18), new Color(44, 62, 80) };
+        for (int i = 0; i<allGameObjects.Length; i++) {
+            GameObject go = allGameObjects[i];
             var colorChange = go.GetComponent<Renderer>(); //randomizing the color attached to get easy to view multicolor faces
-            colorChange.material.SetColor("_Color", UnityEngine.Random.ColorHSV(0f, 1f, 1f, 1f, 0.5f, 1f));
+            colorChange.material.SetColor("_Color", faceColors[1]);
+               // UnityEngine.Random.ColorHSV(0f, 1f, 1f, 1f, 0.5f, 1f));
         }
     }
 
@@ -795,10 +916,23 @@ public class MyScript : MonoBehaviour
                             returnList.Add(new Edge[] { edge1, edge2 });
                             insideFacePolygons.Add(realPolygons[i]);
                             insideFacePolygons.Add(realPolygons[j]);
+                            Vector3 avgp1;
+                            Vector3 avgp2;
+                            if(Vector3.Distance(edge1.vertex1,edge2.vertex1) < Vector3.Distance(edge1.vertex1, edge2.vertex2))
+                            {
+                                avgp1 = (edge1.vertex1 + edge2.vertex1) / 2;
+                                avgp2 = (edge1.vertex2 + edge2.vertex2) / 2;
+                            }
+                            else
+                            {
+                                avgp1 = (edge1.vertex1 + edge2.vertex2) / 2;
+                                avgp2 = (edge1.vertex2 + edge2.vertex1) / 2;
+                            }
+                            MyHinge hinge = new MyHinge(realPolygons[i], realPolygons[j], avgp1, avgp2);
 
-                            MyHinge hinge = new MyHinge(realPolygons[i], realPolygons[j], edge1.vertex1, edge1.vertex2);
-                            
-                            if(!uniqueHinges.Contains(hinge)) //slow but oh well
+                            //MyHinge hinge = new MyHinge(realPolygons[i], realPolygons[j], edge1.vertex1, edge1.vertex2);
+
+                            if (!uniqueHinges.Contains(hinge)) //slow but oh well
                                 uniqueHinges.Add(hinge);
                         }
                     }
@@ -809,13 +943,15 @@ public class MyScript : MonoBehaviour
         realPolygons = insideFacePolygons.ToList();
         return returnList;
     }
-    void reSizeShape(ref List<Polygon> myPolygons) // List<Edge> edges
+    void ReSizeShape(ref List<Polygon> myPolygons) // List<Edge> edges
     {
-        print(myPolygons.Count);
-        foreach (Polygon p in myPolygons)
+        Color[] faceColors = new Color[] { new Color32(231, 76, 60,255), new Color32(155, 89, 182,255), new Color32(41, 128, 185,255), new Color32(163, 228, 215, 255), new Color32(243, 156, 18,255), new Color32(20, 90, 50,255) };
+        
+        for(int i = 0; i< myPolygons.Count; i++) 
         {
+            Polygon p = myPolygons[i];
             List<Vector3> verticiesList = p.getVerticies();
-            print("verts: "+ verticiesList.Count);
+            
             int[] triangles = CreateTriangleArray(p,verticiesList).ToArray();
             Vector3[] vertices = p.getVerticies().ToArray();
             GameObject newGo = new GameObject(p.EdgeList[0].go.name, typeof(MeshFilter), typeof(MeshRenderer));
@@ -824,19 +960,18 @@ public class MyScript : MonoBehaviour
             newGo.GetComponent<MeshFilter>().mesh = mesh;
             mesh.vertices = vertices;
             mesh.triangles = triangles;
-            print(triangles);
             foreach (Edge e in p)
             {
                 e.go = newGo;
             }
-            var colorChange = newGo.GetComponent<Renderer>(); //randomizing the color attached to get easy to view multicolor faces
-            colorChange.material.SetColor("_Color", UnityEngine.Random.ColorHSV(0f, 1f, 1f, 1f, 0.5f, 1f));
+            var colorChange = newGo.GetComponent<Renderer>(); 
+            colorChange.material.SetColor("_Color", faceColors[i]);
             Destroy(oldPlace);
 
         }
     }
 
-    List<int> CreateTriangleArray(Polygon p, List<Vector3> verticies) //Assuming winding order does not matter for colliders -- if needed uncomment out the flipped code to make figure double sided
+    List<int> CreateTriangleArray(Polygon p, List<Vector3> verticies) 
     {
         List<Triangle> tList = p.createTriangles();
         List<int> indexList = new List<int>();
