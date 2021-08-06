@@ -237,6 +237,9 @@ class MyHinge //everything in here is in world space !!
     public Vector3 orthogonalV1;
     public Vector3 orthogonalV2;
     public List<MyHinge> connectedHinges = new List<MyHinge>();
+    public Vector3 normalToCenter1;
+    
+    public Vector3 normalToCenter2;
 
     public static List<Polygon> lockedFaces = new List<Polygon>();
     public GameObject go1;
@@ -365,7 +368,7 @@ class MyHinge //everything in here is in world space !!
     /// Moves GO's, updates 
     /// </summary>
     /// <param name="rad"></param>
-    public void updateAngle(float deg)  //need to adjust the flaps here too...locked faces not really used
+    public void updateAngle(float deg) //need to adjust the flaps here too...locked faces not really used
     {
         this.updatedAngle += deg;
 
@@ -388,16 +391,31 @@ class MyHinge //everything in here is in world space !!
         }
     }
     
-    private void RotateAroundPivot(bool firstGo, float deg,bool updateValueOnly = false) 
+
+    private void RotateAroundPivot(bool firstGo, float deg, bool updateValueOnly = false) 
     {        
 
             //you have to track the flaps here
         GameObject parent = this.GetTranslateParent(firstGo);
         parent.transform.Rotate(this.axis, deg);
         Quaternion rotation = Quaternion.AngleAxis(deg, this.axis);
+        
+        Debug.DrawRay(polygon2.getMiddle(), this.normalToCenter2,Color.red,100f);//@APPEARS TO BE WORKING RIght
+        //zfighting
+        if (firstGo)
+        {
+            this.normalToCenter1 = rotation.normalized * this.normalToCenter1;
+        }
+        if (!firstGo)
+        {
+            this.normalToCenter2 = rotation.normalized * this.normalToCenter2;
+        }
+        //DrawNormalToCenters();
 
+        //this is to move the flaps in sync with face ABCD
         if ((this.go1.name.Contains("abcd") || this.go2.name.Contains("abcd")) && firstGo) //added first go to make sure this only gets executed one time
         {
+            
             foreach (MyHinge hinge in this.connectedHinges)
             {
 
@@ -466,6 +484,26 @@ class MyHinge //everything in here is in world space !!
     {
         Debug.DrawLine(axisPointA, axisPointB, Color.green, 20f);
     }
+    /// <summary>
+    /// Draws the Normal to Center Ray
+    /// </summary>
+    /// <param name="go"></param> 0 means to draw both, 1/2 will specify which game object to draw
+    public void DrawNormalToCenters(int go = 0)
+    {
+        if (go == 0)
+        {
+            Debug.DrawLine(this.polygon1.getMiddle(), normalToCenter1, Color.yellow, 50f);
+            Debug.DrawLine(this.polygon2.getMiddle(), normalToCenter2, Color.yellow, 50f);
+        }
+        if (go == 1)
+        {
+            Debug.DrawLine(this.polygon1.getMiddle(), normalToCenter1, Color.yellow, 50f);
+        }
+        if (go == 2)
+        {
+            Debug.DrawLine(this.polygon2.getMiddle(), normalToCenter2, Color.yellow, 50f);
+        }
+    }
 
     public override int GetHashCode()
     {
@@ -477,9 +515,7 @@ class MyHinge //everything in here is in world space !!
         return base.ToString();
     }
 }
-/// <summary>
-/// 
-/// </summary>
+
 public class MyScript : MonoBehaviour
 {
     List<MyHinge> uniqueHinges;
@@ -510,8 +546,14 @@ public class MyScript : MonoBehaviour
     GameObject faceABCD;
     GameObject faceOpp;
 
+    public float Z_DISPLACEMENT = .01f;
+
     List<GameObject> myStack1 = new List<GameObject>(); //the stack that the flaps can be added to
     List<GameObject> myStack2 = new List<GameObject>();
+
+    Vector3 stack1UpVector; //also known as abcdToCenter
+    Vector3 abcdCenter;
+    Vector3 stack2UpVector;
     [System.NonSerialized]
     public bool gameObjectDestroyed;
 
@@ -565,15 +607,22 @@ public class MyScript : MonoBehaviour
         hingeC.connectedHinges.Add(flapA);
         hingeC.connectedHinges.Add(flapB);
 
+        faceA = allGameObj.Where(go => go.name.Equals("a")).First();
+        faceB = allGameObj.Where(go => go.name.Equals("b")).First();
+        faceC = allGameObj.Where(go => go.name.Equals("c")).First();
+        faceDandOpp = allGameObj.Where(go => go.name.Equals("d&opp")).First();
+        faceABCD = allGameObj.Where(go => go.name.Equals("abcd")).First();
+        faceOpp = allGameObj.Where(go => go.name.Equals("opp")).First();
 
+        findNormals();
+
+        //@FIXME need to assign all faceC and jazz
 
         //UpdateAngleA(userAngleA - flapA.updatedAngle);
         //UpdateAngleB(userAngleB - flapB.updatedAngle);
         //UpdateAngleC(userAngleC - hingeC.updatedAngle); //pass in a delta
         //UpdateAngleD((360 - userAngleD) - hingeD.updatedAngle);
         //UpdateAngleD(-hingeD.updatedAngle);
-
-
     }
 
     private void Update()
@@ -581,16 +630,58 @@ public class MyScript : MonoBehaviour
     }
     void FixedUpdate() //update commands are all in deltas (how much you want them to move)
     {
-        
-        
+        UpdateAngleC(.1f);
+        foreach(GameObject go in myStack2)
+        {
+            print(go.name);
+        }
+
+        ////stack1UpVector = ABCD Up Direction
+        //if(hingeC.updatedAngle > 179 || (hingeD.updatedAngle == 0 && (hingeC.updatedAngle > 1 && hingeC.updatedAngle < 359)))
+        //{
+        //    //stack2UpVector = C up direciton
+        //}
+        //if(hingeC.updatedAngle <1 && (hingeD.updatedAngle > 1 && hingeD.updatedAngle < 359))
+        //{
+        //    //stack2UpVector = Opp up direction
+
+
+        //}
+        //zOffset();
+
     }
     public void UpdateAngleA(float deg)
     {
         UpdateFlap( deg, flapA);
+        if(flapA.updatedAngle < 1)
+        {
+            if (!myStack1.Contains(faceA))
+                myStack1.Insert(0, faceA);
+        }
+        if (flapA.updatedAngle > 359)
+        {
+            if (!myStack1.Contains(faceA))
+                myStack1.Add(faceA);
+        }
+        else
+            myStack1.Remove(faceA);
+
     }
     public void UpdateAngleB(float deg)
     {
         UpdateFlap( deg, flapB);
+        if (flapB.updatedAngle < 1)
+        {
+            if (!myStack1.Contains(faceB))
+                myStack1.Insert(0, faceB);
+        }
+        if (flapB.updatedAngle > 359)
+        {
+            if (!myStack1.Contains(faceB))
+                myStack1.Add(faceB);
+        }
+        else
+            myStack1.Remove(faceB);
     }
     private void UpdateFlap(float deg, MyHinge hinge)
     {
@@ -625,13 +716,37 @@ public class MyScript : MonoBehaviour
             hingeD.updateAngle(deg);
             DandOppHinges[1].updateAngle(deg);
             MyHinge.lockedFaces.Clear();
+
+           
         }
         else //otherwise d is directly dependent on C
         {
             UpdateAngleC(-deg);
         }
 
-        
+        //Zoffsetfighting
+        if (hingeD.updatedAngle < 1)
+        {
+            if (!myStack1.Contains(faceOpp) && !myStack1.Contains(faceDandOpp))
+            {
+                myStack1.Insert(0, faceOpp);
+                myStack1.Insert(0, faceDandOpp);
+            }
+        }
+        if (hingeD.updatedAngle > 359)
+        {
+            if (!myStack1.Contains(faceOpp) && !myStack1.Contains(faceDandOpp))
+            {
+                myStack1.Add( faceDandOpp);
+                myStack1.Add(faceOpp);
+            }
+        }
+        else
+        {
+            myStack2.Clear();
+            myStack1.Remove(faceOpp);
+            myStack1.Remove(faceDandOpp);
+        }
     }
 
     float UpdateAngleC(float deg) //distance apart is length*cos(pheta/2)-> dX/dPheta = length*-sin(pheta/2) *.5
@@ -661,6 +776,9 @@ public class MyScript : MonoBehaviour
         {
             if (angleC + deg > 180) //only doing one type of movement at a time
                 deg = 180 - angleC;
+
+            
+
             foreach (MyHinge hinge in interiorHinges)
             {
                 hinge.updateAngle(deg);
@@ -684,57 +802,100 @@ public class MyScript : MonoBehaviour
             DandOppHinges[1].updatedAngle = adjAngle;
         }       
         
-        //ZOffsetFighting
-        if(myStack1 != null && (!myStack1.Contains(faceOpp) && !myStack1.Contains(faceC)))
+        //ZOffsetFighting need a way of removing the lists once done
+        if(hingeC.updatedAngle > 359 && !myStack1.Contains(faceC) && !myStack1.Contains(faceOpp))
         {
-            if(hingeD.updatedAngle < 1) //then we assume it should be order 
+            myStack2.Clear();
+            myStack1.Add(faceC);
+            myStack1.Add(faceOpp);
+        }
+        if(hingeC.updatedAngle < 359 && hingeC.updatedAngle > 179 && !myStack2.Contains(faceOpp) && !myStack1.Contains(faceDandOpp)) //180 usecase
+        {
+            myStack2.Add(faceOpp);
+            myStack2.Add(faceC);
+
+            myStack1.Insert(0,faceDandOpp);
+            if (!myStack1.Contains(faceABCD))
+                myStack1.Add(faceABCD);
+        }
+        if( hingeC.updatedAngle < 1)
+        {
+            if (hingeD.updatedAngle < 1 && !myStack1.Contains(faceC) && !myStack1.Contains(faceOpp))
             {
-                if(hingeC.updatedAngle < 1)
-                {
-                    myStack1.Insert(0, faceOpp);
-                    myStack1.Insert(0, faceC);
-                }
-                if(hingeC.updatedAngle > 360)
-                {
-                    myStack1.Add(faceC);
-                    myStack1.Add(faceOpp);
-                }
+                myStack1.Insert(0, faceOpp);
+                myStack1.Insert(0, faceC);
             }
+            else if(!myStack1.Contains(faceC) && !myStack2.Contains(faceOpp))
+            {
+                //stack1 needs to add c
+                myStack2.Clear();
+                myStack2.Add(faceOpp);
+                myStack2.Add(faceDandOpp);
+               
+
+                myStack1.Insert(0,faceC);
+                if(!myStack1.Contains(faceABCD))
+                    myStack1.Add(faceABCD);
+            }
+        }
+        if(hingeC.updatedAngle>1 && hingeC.updatedAngle < 180)
+        {
+            myStack2.Clear();
+            myStack1.Remove(faceDandOpp);
         }
         return interiorHinges[0].updatedAngle;
     }
-    void zOffset(List<GameObject> myStack1,List<GameObject> myStack2) // no flap functionality yet
+    /// <summary>
+    /// Given the order of the stacks I need to move the elements at the top of the stack and the bottom of the stack apart from eachother ever so slightly
+    /// </summary>
+    void zOffset() // no flap functionality yet
     {            
         
         
+    }
+    void findNormals()
+    {
+
+        Vector3[] faceCenters = new Vector3[4]; //(same order as below)
         
-        
+        GameObject[] square = { faceC, faceOpp, faceDandOpp, faceABCD };
+        List<Vector3> allVerticies = new List<Vector3>();
+        for(int i = 0; i<square.Length; i++)
+        {
+            GameObject go = square[i];
+            List<Vector3> myVerticies = new List<Vector3>();
+            go.GetComponent<MeshFilter>().mesh.GetVertices(myVerticies);
+            Vector3 faceCenter = Vector3.zero;
+            foreach (Vector3 v in myVerticies) {
+                allVerticies.Add(go.transform.TransformPoint(v));
+                faceCenter += go.transform.TransformPoint(v);
+            }
+            faceCenters[i] = faceCenter / myVerticies.Count;
+        }
+        Vector3 interior = Vector3.zero;
+        foreach (Vector3 v in allVerticies)
+        {
+            interior += v;
+        }
+        interior /= allVerticies.Count;
 
-        //if (hingeC.updatedAngle == 0 && hingeD.updatedAngle == 180)
-        //{
+        foreach(Vector3 v in faceCenters) 
+            Debug.DrawRay(v,interior-v, Color.blue, 100f);
+        Vector3 abcdToCenter = interior - faceCenters[3];
+        // stack1UpVector = abcdToCenter; //@FIXME implement the stack 2 up Vector
+        //  abcdCenter = faceCenters[3];
 
-        //}
-        //if (hingeC.updatedAngle == 0 && hingeD.updatedAngle == 0)
-        //{
-
-        //}
-        //if (hingeC.updatedAngle == 0 && hingeD.updatedAngle == 360)
-        //{
-
-        //}
-        //if (hingeC.updatedAngle == 180 && hingeD.updatedAngle == 0)
-        //{
-
-        //}
-        //if (hingeC.updatedAngle == 360 && hingeD.updatedAngle == 0)
-        //{
-
-
-
-
+        if (hingeC.go1.name.Equals("abcd"))
+        {
+            hingeC.normalToCenter1 = abcdToCenter;
+        }
+        if (hingeC.go2.name.Equals("abcd"))
+        {
+            hingeC.normalToCenter2 = abcdToCenter;
+        }
 
     }
-  
+
 
     /// <summary>
     ///Returns a list of all game objects under the parented object <parentModel> (parent object not included)
@@ -967,6 +1128,7 @@ public class MyScript : MonoBehaviour
             var colorChange = newGo.GetComponent<Renderer>(); 
             colorChange.material.SetColor("_Color", faceColors[i]);
             Destroy(oldPlace);
+            allGameObj[i] = newGo;
 
         }
     }
