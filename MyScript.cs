@@ -394,13 +394,13 @@ class MyHinge //everything in here is in world space !!
 
     private void RotateAroundPivot(bool firstGo, float deg, bool updateValueOnly = false) 
     {        
-
+        
             //you have to track the flaps here
         GameObject parent = this.GetTranslateParent(firstGo);
         parent.transform.Rotate(this.axis, deg);
         Quaternion rotation = Quaternion.AngleAxis(deg, this.axis);
         
-        Debug.DrawRay(polygon2.getMiddle(), this.normalToCenter2,Color.red,100f);//@APPEARS TO BE WORKING RIght
+        
         //zfighting
         if (firstGo)
         {
@@ -531,12 +531,12 @@ public class MyScript : MonoBehaviour
     public double sideArea;
 
     private double squareLength;
-    private List<GameObject> ColliderGoList;
+    List<GameObject> hiddenGo = new List<GameObject>();
     GameObject[] allGameObj;
     List<MyHinge> interiorHinges = new List<MyHinge>();
     List<MyHinge> DandOppHinges = new List<MyHinge>();
-    MyHinge flapA;
-    MyHinge flapB;
+    MyHinge hingeA;
+    MyHinge hingeB;
     MyHinge hingeC;
     MyHinge hingeD;
     GameObject faceA;
@@ -548,7 +548,7 @@ public class MyScript : MonoBehaviour
 
     public float Z_DISPLACEMENT;
 
-    List<GameObject> myStack1 = new List<GameObject>(); //the stack that the flaps can be added to
+    List<GameObject> myStack1 = new List<GameObject>(); //the stack that the flaps can be added to (abcd to center)
     List<GameObject> myStack2 = new List<GameObject>();
     List<GameObject> prevMyStack1 = new List<GameObject>();
     List<GameObject> prevMyStack2 = new List<GameObject>();
@@ -586,8 +586,8 @@ public class MyScript : MonoBehaviour
         Time.fixedDeltaTime = 0.01f;
         //c and angle across from it
         hingeC = uniqueHinges.Where(hinge => hinge.go1.name.Contains("c") && hinge.go2.name.Contains("c")).First(); //hopefully there is only 1
-        flapA = uniqueHinges.Where(hinge => hinge.go1.name.Contains("a") && hinge.go2.name.Contains("a")).First();
-        flapB = uniqueHinges.Where(hinge => hinge.go1.name.Contains("b") && hinge.go2.name.Contains("b")).First();
+        hingeA = uniqueHinges.Where(hinge => hinge.go1.name.Contains("a") && hinge.go2.name.Contains("a")).First();
+        hingeB = uniqueHinges.Where(hinge => hinge.go1.name.Contains("b") && hinge.go2.name.Contains("b")).First();
         hingeD = uniqueHinges.Where(hinge => hinge.go1.name.Contains("d") && hinge.go2.name.Contains("d")).First();
 
         interiorHinges.Add(hingeC);
@@ -607,8 +607,8 @@ public class MyScript : MonoBehaviour
                 DandOppHinges.Add(hinge);
             }
         }
-        hingeC.connectedHinges.Add(flapA);
-        hingeC.connectedHinges.Add(flapB);
+        hingeC.connectedHinges.Add(hingeA);
+        hingeC.connectedHinges.Add(hingeB);
 
         faceA = allGameObj.Where(go => go.name.Equals("a")).First();
         faceB = allGameObj.Where(go => go.name.Equals("b")).First();
@@ -647,30 +647,29 @@ public class MyScript : MonoBehaviour
         zOffset();
         UpdateAngleC(.1f);
 
-
-        ////stack1UpVector = ABCD Up Direction
-        //if(hingeC.updatedAngle > 179 || (hingeD.updatedAngle == 0 && (hingeC.updatedAngle > 1 && hingeC.updatedAngle < 359)))
-        //{
-        //    //stack2UpVector = C up direciton
+        //if (hingeC.go1.Equals(faceC)){
+        //    print(hingeC.normalToCenter1);
+        //    Debug.DrawRay(hingeC.anchor, hingeC.normalToCenter1, Color.black,100f);
         //}
-        //if(hingeC.updatedAngle <1 && (hingeD.updatedAngle > 1 && hingeD.updatedAngle < 359))
+        //if (hingeC.go2.Equals(faceC))
         //{
-        //    //stack2UpVector = Opp up direction
+        //    print("HERE2");
 
-
+        //    Debug.DrawRay(hingeC.anchor, hingeC.normalToCenter2, Color.black, 100f);
         //}
-        
+
+
 
     }
     public void UpdateAngleA(float deg)
     {
-        UpdateFlap( deg, flapA);
-        if(flapA.updatedAngle < 1)
+        UpdateFlap( deg, hingeA);
+        if(hingeA.updatedAngle < 1)
         {
             if (!myStack1.Contains(faceA))
                 myStack1.Insert(0, faceA);
         }
-        if (flapA.updatedAngle > 359)
+        if (hingeA.updatedAngle > 359)
         {
             if (!myStack1.Contains(faceA))
                 myStack1.Add(faceA);
@@ -681,13 +680,13 @@ public class MyScript : MonoBehaviour
     }
     public void UpdateAngleB(float deg)
     {
-        UpdateFlap( deg, flapB);
-        if (flapB.updatedAngle < 1)
+        UpdateFlap( deg, hingeB);
+        if (hingeB.updatedAngle < 1)
         {
             if (!myStack1.Contains(faceB))
                 myStack1.Insert(0, faceB);
         }
-        if (flapB.updatedAngle > 359)
+        if (hingeB.updatedAngle > 359)
         {
             if (!myStack1.Contains(faceB))
                 myStack1.Add(faceB);
@@ -872,14 +871,22 @@ public class MyScript : MonoBehaviour
     }
     /// <summary>
     /// Given the order of the stacks I need to move the elements at the top of the stack and the bottom of the stack apart from eachother ever so slightly
-    /// Could be causing erros need to unTranslate the previous two I translated.I think multiplying be negative is wrong though
+    /// TODO: make middle ones invisible in bigger stacks if needed
     /// </summary>
     public Boolean zOffset() //I think this is causing issues in the rotation
     {
         
-        ///@TODO: attach parents and fix that kind of stuff up
-        Vector3 localStack1Up = stack1UpVector;
-        if(myStack1 != null && myStack1.Count > 1)
+        //if(hingeC.updatedAngle > 90)
+        //{
+        //    stack2UpVector = hingeC.go1.Equals(faceC) ? hingeC.normalToCenter1 : hingeC.normalToCenter2;
+        //}
+        //if (hingeC.updatedAngle < 90)
+        //{
+        //    stack2UpVector = interiorHinges[1].go1.Equals(faceDandOpp) ? interiorHinges[1].normalToCenter1 : interiorHinges[1].normalToCenter2;
+        //}
+
+        ///attach parents and fix that kind of stuff up
+        if (myStack1 != null && myStack1.Count > 1)
         {
             if (!prevMyStack1.SequenceEqual(myStack1))
             {
@@ -889,20 +896,57 @@ public class MyScript : MonoBehaviour
                 prevStack1UpVector = Vector3.zero; //gotta make sure it moves foward first
 
             }
-            //0 is canceling out because it subtracts first!! @FIXME
             myStack1[0].transform.Translate(-prevStack1UpVector.normalized * Z_DISPLACEMENT, Space.World);
             myStack1[myStack1.Count-1].transform.Translate(prevStack1UpVector.normalized * Z_DISPLACEMENT, Space.World);
 
-            myStack1[0].transform.Translate(localStack1Up.normalized * Z_DISPLACEMENT , Space.World);
-            myStack1[myStack1.Count - 1].transform.Translate(-localStack1Up.normalized * Z_DISPLACEMENT, Space.World);
+            myStack1[0].transform.Translate(stack1UpVector.normalized * Z_DISPLACEMENT , Space.World);
+            myStack1[myStack1.Count - 1].transform.Translate(-stack1UpVector.normalized * Z_DISPLACEMENT, Space.World);
 
-            prevStack1UpVector = localStack1Up;
+            prevStack1UpVector = stack1UpVector;
 
         }
         prevMyStack1.Clear();
         foreach (GameObject go in myStack1)
         {
             prevMyStack1.Add(go);
+        }
+
+        if(myStack2 != null && myStack2.Count > 1)
+        {
+            if (!prevMyStack1.SequenceEqual(myStack1))
+            {
+                Debug.Log("STACK CHANGE");
+                prevMyStack2[0].transform.Translate(-prevStack2UpVector.normalized * Z_DISPLACEMENT, Space.World);
+                prevMyStack2[prevMyStack2.Count - 1].transform.Translate(prevStack2UpVector.normalized * Z_DISPLACEMENT, Space.World);
+                prevStack2UpVector = Vector3.zero; //gotta make sure it moves foward first
+
+            }
+            myStack2[0].transform.Translate(-prevStack2UpVector.normalized * Z_DISPLACEMENT, Space.World);
+            myStack2[myStack1.Count - 1].transform.Translate(prevStack2UpVector.normalized * Z_DISPLACEMENT, Space.World);
+
+            myStack2[0].transform.Translate(stack2UpVector.normalized * Z_DISPLACEMENT, Space.World);
+            myStack2[myStack2.Count - 1].transform.Translate(-stack2UpVector.normalized * Z_DISPLACEMENT, Space.World);
+
+            prevStack2UpVector = stack2UpVector;
+        }
+
+        if(myStack1.Count > 2) //hide middle stuff
+            for (int i = 0; i < myStack1.Count; i++)
+            {
+                if (i != 0 && i != myStack1.Count - 1)
+                {
+                    myStack1[i].GetComponent<MeshRenderer>().enabled = false;
+                    hiddenGo.Add(myStack1[i]);
+                }
+            }
+        else
+        {
+            foreach(GameObject go in hiddenGo)
+            {
+                go.GetComponent<MeshRenderer>().enabled = true;
+            }
+            hiddenGo.Clear();
+
         }
         return true;
     
@@ -934,20 +978,24 @@ public class MyScript : MonoBehaviour
         }
         interior /= allVerticies.Count;
 
-        foreach(Vector3 v in faceCenters) 
-            Debug.DrawRay(v,interior-v, Color.blue, 100f);
+     
         Vector3 abcdToCenter = interior - faceCenters[3];
-        // stack1UpVector = abcdToCenter; //@FIXME implement the stack 2 up Vector
-        //  abcdCenter = faceCenters[3];
+        Vector3 dandOppToCenter = interior - faceCenters[2];
+        Vector3 cToCenter = interior - faceCenters[0];
 
         if (hingeC.go1.name.Equals("abcd"))
-        {
             hingeC.normalToCenter1 = abcdToCenter;
-        }
         if (hingeC.go2.name.Equals("abcd"))
-        {
             hingeC.normalToCenter2 = abcdToCenter;
-        }
+        if(interiorHinges[1].go1.name.Equals("d&opp"))
+            interiorHinges[1].normalToCenter1 = dandOppToCenter;
+        if (interiorHinges[1].go2.name.Equals("d&opp"))
+            interiorHinges[1].normalToCenter2 = dandOppToCenter;
+        if (hingeC.go1.name.Equals("c"))
+            hingeC.normalToCenter1 = cToCenter;
+        if (hingeC.go2.name.Equals("c"))
+            hingeC.normalToCenter2 = cToCenter;
+
 
     }
 
