@@ -546,14 +546,17 @@ public class MyScript : MonoBehaviour
     GameObject faceABCD;
     GameObject faceOpp;
 
-    public float Z_DISPLACEMENT = .01f;
+    public float Z_DISPLACEMENT;
 
     List<GameObject> myStack1 = new List<GameObject>(); //the stack that the flaps can be added to
     List<GameObject> myStack2 = new List<GameObject>();
+    List<GameObject> prevMyStack1 = new List<GameObject>();
+    List<GameObject> prevMyStack2 = new List<GameObject>();
 
     Vector3 stack1UpVector; //also known as abcdToCenter
-    Vector3 abcdCenter;
     Vector3 stack2UpVector;
+    Vector3 prevStack1UpVector = Vector3.zero;
+    Vector3 prevStack2UpVector = Vector3.zero;
     [System.NonSerialized]
     public bool gameObjectDestroyed;
 
@@ -624,17 +627,26 @@ public class MyScript : MonoBehaviour
         //UpdateAngleD((360 - userAngleD) - hingeD.updatedAngle);
         //UpdateAngleD(-hingeD.updatedAngle);
     }
-
+    String stackPrint(List<GameObject> myStack)
+    {
+        String returnString = "";
+        foreach(GameObject go in myStack)
+        {
+            returnString += go.name + " < ";
+        }
+        return returnString;
+    }
     private void Update()
     {
     }
+
     void FixedUpdate() //update commands are all in deltas (how much you want them to move)
     {
+
+        print(stackPrint(myStack1));
+        zOffset();
         UpdateAngleC(.1f);
-        foreach(GameObject go in myStack2)
-        {
-            print(go.name);
-        }
+
 
         ////stack1UpVector = ABCD Up Direction
         //if(hingeC.updatedAngle > 179 || (hingeD.updatedAngle == 0 && (hingeC.updatedAngle > 1 && hingeC.updatedAngle < 359)))
@@ -647,7 +659,7 @@ public class MyScript : MonoBehaviour
 
 
         //}
-        //zOffset();
+        
 
     }
     public void UpdateAngleA(float deg)
@@ -724,7 +736,6 @@ public class MyScript : MonoBehaviour
             UpdateAngleC(-deg);
         }
 
-        //Zoffsetfighting
         if (hingeD.updatedAngle < 1)
         {
             if (!myStack1.Contains(faceOpp) && !myStack1.Contains(faceDandOpp))
@@ -797,33 +808,47 @@ public class MyScript : MonoBehaviour
                     hinge.TranslateHinge(-dX, true);
                 }
             }
-            float adjAngle = 180 - hingeC.updatedAngle; //@FIXME
+            float adjAngle = 180 - hingeC.updatedAngle; 
             hingeD.updatedAngle = adjAngle;
             DandOppHinges[1].updatedAngle = adjAngle;
         }       
         
-        //ZOffsetFighting need a way of removing the lists once done
         if(hingeC.updatedAngle > 359 && !myStack1.Contains(faceC) && !myStack1.Contains(faceOpp))
         {
+            if (!myStack1.Contains(faceDandOpp) && !myStack1.Contains(faceABCD))
+            {
+                myStack1.Clear();
+                myStack1.Add(faceDandOpp);
+                myStack1.Add(faceABCD);
+            }
+
             myStack2.Clear();
             myStack1.Add(faceC);
             myStack1.Add(faceOpp);
+            
         }
-        if(hingeC.updatedAngle < 359 && hingeC.updatedAngle > 179 && !myStack2.Contains(faceOpp) && !myStack1.Contains(faceDandOpp)) //180 usecase
+        if(hingeC.updatedAngle < 359 && hingeC.updatedAngle > 179 && !myStack2.Contains(faceOpp)) //180 usecase
         {
+            myStack2.Clear();
             myStack2.Add(faceOpp);
             myStack2.Add(faceC);
 
-            myStack1.Insert(0,faceDandOpp);
+            if (!myStack1.Contains(faceDandOpp))
+                myStack1.Insert(0, faceDandOpp);
             if (!myStack1.Contains(faceABCD))
                 myStack1.Add(faceABCD);
+
         }
-        if( hingeC.updatedAngle < 1)
+        if ( hingeC.updatedAngle < 1)
         {
-            if (hingeD.updatedAngle < 1 && !myStack1.Contains(faceC) && !myStack1.Contains(faceOpp))
+            if(!myStack1.Contains(faceC))
+                myStack1.Insert(0,faceC);
+            if (!myStack1.Contains(faceABCD))
+                myStack1.Add(faceABCD);
+            if (hingeD.updatedAngle < 1 && !myStack1.Contains(faceDandOpp) && !myStack1.Contains(faceOpp))
             {
                 myStack1.Insert(0, faceOpp);
-                myStack1.Insert(0, faceC);
+                myStack1.Insert(0, faceDandOpp);
             }
             else if(!myStack1.Contains(faceC) && !myStack2.Contains(faceOpp))
             {
@@ -832,25 +857,55 @@ public class MyScript : MonoBehaviour
                 myStack2.Add(faceOpp);
                 myStack2.Add(faceDandOpp);
                
-
-                myStack1.Insert(0,faceC);
-                if(!myStack1.Contains(faceABCD))
-                    myStack1.Add(faceABCD);
             }
         }
         if(hingeC.updatedAngle>1 && hingeC.updatedAngle < 180)
         {
             myStack2.Clear();
-            myStack1.Remove(faceDandOpp);
+            myStack1.RemoveAll(go => go != faceA && go != faceB && go != faceABCD);
         }
+        if (hingeC.go1.Equals(faceABCD))
+            stack1UpVector = hingeC.normalToCenter1;
+        if (hingeC.go2.Equals(faceABCD))
+            stack1UpVector = hingeC.normalToCenter2;
         return interiorHinges[0].updatedAngle;
     }
     /// <summary>
     /// Given the order of the stacks I need to move the elements at the top of the stack and the bottom of the stack apart from eachother ever so slightly
+    /// Could be causing erros need to unTranslate the previous two I translated.I think multiplying be negative is wrong though
     /// </summary>
-    void zOffset() // no flap functionality yet
-    {            
+    public Boolean zOffset() //I think this is causing issues in the rotation
+    {
         
+        ///@TODO: attach parents and fix that kind of stuff up
+        Vector3 localStack1Up = stack1UpVector;
+        if(myStack1 != null && myStack1.Count > 1)
+        {
+            if (!prevMyStack1.SequenceEqual(myStack1))
+            {
+                Debug.Log("STACK CHANGE");
+                prevMyStack1[0].transform.Translate(-prevStack1UpVector.normalized * Z_DISPLACEMENT, Space.World);
+                prevMyStack1[prevMyStack1.Count -1].transform.Translate(prevStack1UpVector.normalized * Z_DISPLACEMENT, Space.World);
+                prevStack1UpVector = Vector3.zero; //gotta make sure it moves foward first
+
+            }
+            //0 is canceling out because it subtracts first!! @FIXME
+            myStack1[0].transform.Translate(-prevStack1UpVector.normalized * Z_DISPLACEMENT, Space.World);
+            myStack1[myStack1.Count-1].transform.Translate(prevStack1UpVector.normalized * Z_DISPLACEMENT, Space.World);
+
+            myStack1[0].transform.Translate(localStack1Up.normalized * Z_DISPLACEMENT , Space.World);
+            myStack1[myStack1.Count - 1].transform.Translate(-localStack1Up.normalized * Z_DISPLACEMENT, Space.World);
+
+            prevStack1UpVector = localStack1Up;
+
+        }
+        prevMyStack1.Clear();
+        foreach (GameObject go in myStack1)
+        {
+            prevMyStack1.Add(go);
+        }
+        return true;
+    
         
     }
     void findNormals()
