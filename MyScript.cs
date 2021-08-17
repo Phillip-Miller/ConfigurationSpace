@@ -368,7 +368,7 @@ class MyHinge //everything in here is in world space !!
     /// Moves GO's, updates 
     /// </summary>
     /// <param name="rad"></param>
-    public void updateAngle(float deg) //need to adjust the flaps here too...locked faces not really used
+    public float updateAngle(float deg) //need to adjust the flaps here too...locked faces not really used
     {
         this.updatedAngle += deg;
 
@@ -389,6 +389,7 @@ class MyHinge //everything in here is in world space !!
             RotateAroundPivot(true, deg/2);
             RotateAroundPivot(false,-1*deg/2);
         }
+        return this.updatedAngle;
     }
     
 
@@ -643,9 +644,9 @@ public class MyScript : MonoBehaviour
     void FixedUpdate() //update commands are all in deltas (how much you want them to move)
     {
 
-        print(stackPrint(myStack1));
+        if(myStack1.Count > 1)
+            print(stackPrint(myStack1));
         zOffset();
-        UpdateAngleC(.1f);
 
         //if (hingeC.go1.Equals(faceC)){
         //    print(hingeC.normalToCenter1);
@@ -661,9 +662,11 @@ public class MyScript : MonoBehaviour
 
 
     }
-    public void UpdateAngleA(float deg)
+    public float UpdateAngleA(float deg)
     {
-        UpdateFlap( deg, hingeA);
+        //These seem to be rotating around the wrong axis
+        print("HERE");
+        float returnAngle = UpdateFlap( deg, hingeA);
         if(hingeA.updatedAngle < 1)
         {
             if (!myStack1.Contains(faceA))
@@ -676,11 +679,11 @@ public class MyScript : MonoBehaviour
         }
         else
             myStack1.Remove(faceA);
-
+        return returnAngle;
     }
-    public void UpdateAngleB(float deg)
+    public float UpdateAngleB(float deg)
     {
-        UpdateFlap( deg, hingeB);
+        float returnAngle = UpdateFlap( deg, hingeB);
         if (hingeB.updatedAngle < 1)
         {
             if (!myStack1.Contains(faceB))
@@ -693,20 +696,22 @@ public class MyScript : MonoBehaviour
         }
         else
             myStack1.Remove(faceB);
+        return returnAngle;
     }
-    private void UpdateFlap(float deg, MyHinge hinge)
+    private float UpdateFlap(float deg, MyHinge hinge)
     {
         //figure out which side
         if (hinge.go1.name.Equals("abcd"))
             MyHinge.lockedFaces.Add(hinge.polygon1);
         else
             MyHinge.lockedFaces.Add(hinge.polygon2);
-        hinge.updateAngle(deg);
+        float returnAngle = hinge.updateAngle(deg);
         MyHinge.lockedFaces.RemoveAt(MyHinge.lockedFaces.Count - 1); //removes the polyygon we just added
-
+        return returnAngle;
     }
-    public void UpdateAngleD(float deg)
+    public float UpdateAngleD(float deg)
     {
+        
         if (hingeC.updatedAngle > 180)
         {
             Debug.Log("D Bound Condition");
@@ -757,9 +762,10 @@ public class MyScript : MonoBehaviour
             myStack1.Remove(faceOpp);
             myStack1.Remove(faceDandOpp);
         }
+        return hingeD.updatedAngle;
     }
 
-    float UpdateAngleC(float deg) //distance apart is length*cos(pheta/2)-> dX/dPheta = length*-sin(pheta/2) *.5
+    public float UpdateAngleC(float deg) //distance apart is length*cos(pheta/2)-> dX/dPheta = length*-sin(pheta/2) *.5
                                   //double translateAmmount = -1* (-.5 * squareLength * Math.Sin(Mathf.Deg2Rad*1*deg/2));
                                  //I will have interior angles[0] always be c
     {
@@ -867,7 +873,7 @@ public class MyScript : MonoBehaviour
             stack1UpVector = hingeC.normalToCenter1;
         if (hingeC.go2.Equals(faceABCD))
             stack1UpVector = hingeC.normalToCenter2;
-        return interiorHinges[0].updatedAngle;
+        return hingeC.updatedAngle;
     }
     /// <summary>
     /// Given the order of the stacks I need to move the elements at the top of the stack and the bottom of the stack apart from eachother ever so slightly
@@ -875,15 +881,15 @@ public class MyScript : MonoBehaviour
     /// </summary>
     public Boolean zOffset() //I think this is causing issues in the rotation
     {
-        
-        //if(hingeC.updatedAngle > 90)
-        //{
-        //    stack2UpVector = hingeC.go1.Equals(faceC) ? hingeC.normalToCenter1 : hingeC.normalToCenter2;
-        //}
-        //if (hingeC.updatedAngle < 90)
-        //{
-        //    stack2UpVector = interiorHinges[1].go1.Equals(faceDandOpp) ? interiorHinges[1].normalToCenter1 : interiorHinges[1].normalToCenter2;
-        //}
+
+        if (hingeC.updatedAngle > 90)
+        {
+            stack2UpVector = hingeC.go1.Equals(faceC) ? hingeC.normalToCenter1 : hingeC.normalToCenter2;
+        }
+        if (hingeC.updatedAngle < 90)
+        {
+            stack2UpVector = interiorHinges[1].go1.Equals(faceDandOpp) ? interiorHinges[1].normalToCenter1 : interiorHinges[1].normalToCenter2;
+        }
 
         ///attach parents and fix that kind of stuff up
         if (myStack1 != null && myStack1.Count > 1)
