@@ -8,9 +8,7 @@ using UnityEngine;
  * Angle D will be tracked as inside and converted upon inputs if needed
  * 
  * TODO LIST
- * not going to bother tracking the flap hinges and redrawing them correctly 
- * create fixed colors for each piece -- add different colors for inside and outside( light vs dark)
- * will need to track the 
+ * having anchor and alt anchor parent game objects seems to be creating issues. Can I do all math from the center of a piece or not?
  * @Author Phillip MIller
  * @Date 6/21/2021
  */
@@ -274,31 +272,33 @@ class MyHinge //everything in here is in world space !!
     /// <param name="firstGo"></param>
     /// <param name="altAnchor"></param> anchor of another game object you wish to rotate around 
     /// <returns></returns>
-    private GameObject GetTranslateParent(bool firstGo, Vector3 altAnchor) //for use in rotating around a different gameObject's hinge
+    
+
+    private GameObject GetTranslateParent(bool firstGo, Vector3 altAnchor) //for use in rotating around a different gameObject's hinge, this will be the outermost parent altTrackingParent,TrackingParent,GameObject
+        //@FIXME make sure to run normal getTranslateParent Before hand
     {
         
         GameObject child;
         if (firstGo)
         {
-            if (this.go1.transform.parent != null && this.go1.transform.parent.name.Equals("TrackingParent"))
+            if (this.go1.transform.parent.parent != null && this.go1.transform.parent.parent.name.Equals("AltTrackingParent"))
             { 
-                return this.go1.transform.parent.gameObject;
+                return this.go1.transform.parent.parent.gameObject;
             }
             child = this.go1;
-
         }
         else
         {
-            if (this.go2.transform.parent != null && this.go2.transform.parent.name.Equals("TrackingParent"))
+            if (this.go2.transform.parent.parent != null && this.go2.transform.parent.parent.name.Equals("AltTrackingParent"))
                 return this.go2.transform.parent.gameObject;
             child = this.go2;
         }
-        GameObject parent = new GameObject("TrackingParent");
+        GameObject parent = new GameObject("AltTrackingParent");
         parent.transform.Translate(altAnchor);
         child.transform.parent = parent.transform;
-        return parent; //TODO: this could cause issues with a gameObject having two parents
+        return parent; 
     }
-    private GameObject GetTranslateParent(bool firstGo) //@FIXME source of clipping errors
+    private GameObject GetTranslateParent(bool firstGo) 
     {
 
         GameObject child;
@@ -318,19 +318,23 @@ class MyHinge //everything in here is in world space !!
         if (firstGo)
         {
             if (this.go1.transform.parent != null) {
-                
                 return this.go1.transform.parent.gameObject;
             }
             child = this.go1;
 
         }
         else 
-        { 
+        {
             if (this.go2.transform.parent != null)
+            {
                 return this.go2.transform.parent.gameObject;
-            child = this.go2;
+            }
+                child = this.go2;
         }
-        GameObject parent = new GameObject("PARENT");
+        //GameObject parent = new GameObject("TrackingParent");
+        GameObject parent = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        parent.name = "TrackingParent";
+        parent.transform.localScale = .2f * Vector3.one;
         parent.transform.Translate(this.anchor);
         child.transform.parent = parent.transform;
         return parent;
@@ -374,13 +378,10 @@ class MyHinge //everything in here is in world space !!
 
         if (lockedFaces.Contains(this.polygon1))
         {
-            
-            Debug.Log("Locked Face1");
             RotateAroundPivot(false, deg);
         }
         else if (lockedFaces.Contains(this.polygon2))
         {
-            Debug.Log("Locked Face2");
             RotateAroundPivot(true, deg);
         }
         else
@@ -394,14 +395,14 @@ class MyHinge //everything in here is in world space !!
     
 
     private void RotateAroundPivot(bool firstGo, float deg, bool updateValueOnly = false) 
-    {        
-        
-            //you have to track the flaps here
+    {
+        //@FIXME need to update hinge axis as the shape moves
         GameObject parent = this.GetTranslateParent(firstGo);
         parent.transform.Rotate(this.axis, deg);
+        Debug.DrawRay(this.anchor, this.axis, Color.red, 10f);
         Quaternion rotation = Quaternion.AngleAxis(deg, this.axis);
         
-        
+       
         //zfighting
         if (firstGo)
         {
@@ -413,22 +414,24 @@ class MyHinge //everything in here is in world space !!
         }
         //DrawNormalToCenters();
 
-        //this is to move the flaps in sync with face ABCD
+        //this is to move the flaps in sync with face ABCD @fixme update flaps
         if ((this.go1.name.Contains("abcd") || this.go2.name.Contains("abcd")) && firstGo) //added first go to make sure this only gets executed one time
         {
-            
             foreach (MyHinge hinge in this.connectedHinges)
             {
-
-                bool connectedFirstGo = !this.go1.name.Contains("abcd"); //we want to move the non abcd face (flapA and flapB)
-                hinge.GetTranslateParent(connectedFirstGo, this.anchor).transform.Rotate(this.axis, -deg); 
-                if (connectedFirstGo) //update ortho
+                //@FIXME something is going wrong here
+                bool FlapIsFirstGo = !this.go1.name.Contains("abcd"); //we want to move the non abcd face (flapA and flapB)
+                hinge.GetTranslateParent(FlapIsFirstGo, this.anchor).transform.Rotate(this.axis, -deg); //want to update axisPointA,AxisPointB and then recalculate anchor as well
+                hinge.axisPointA = rotation.normalized * hinge.axisPointA;
+                hinge.axisPointB = rotation.normalized * hinge.axisPointB;
+                hinge.anchor = (hinge.axisPointA + hinge.axisPointB) / 2;
+                if (FlapIsFirstGo) //update ortho
                 {
                     hinge.orthogonalV1 = rotation.normalized * hinge.orthogonalV1; //order matters 
                 }
                 else
                 {
-                    hinge.orthogonalV2 = rotation.normalized * hinge.orthogonalV1; //order matters 
+                    hinge.orthogonalV2 = rotation.normalized * hinge.orthogonalV2; //order matters 
                 }
 
             }
@@ -448,7 +451,6 @@ class MyHinge //everything in here is in world space !!
     }
     public void TranslateHinge(float dX, bool updateValueOnly) 
     {
-        
         dX *= -1;
         orthogonalV1 += ((orthogonalV1 + orthogonalV2) / 2).normalized * dX; 
         orthogonalV2 += ((orthogonalV2 + orthogonalV2) / 2).normalized * dX;
@@ -483,7 +485,7 @@ class MyHinge //everything in here is in world space !!
     /// </summary>
     public void Draw() //need to update these points more often
     {
-        Debug.DrawLine(axisPointA, axisPointB, Color.green, 20f);
+        Debug.DrawLine(axisPointA, axisPointB, Color.green, 1f);
     }
     /// <summary>
     /// Draws the Normal to Center Ray
@@ -643,30 +645,18 @@ public class MyScript : MonoBehaviour
 
     void FixedUpdate() //update commands are all in deltas (how much you want them to move)
     {
-
+        
         if(myStack1.Count > 1)
             print(stackPrint(myStack1));
         zOffset();
-
-        //if (hingeC.go1.Equals(faceC)){
-        //    print(hingeC.normalToCenter1);
-        //    Debug.DrawRay(hingeC.anchor, hingeC.normalToCenter1, Color.black,100f);
-        //}
-        //if (hingeC.go2.Equals(faceC))
-        //{
-        //    print("HERE2");
-
-        //    Debug.DrawRay(hingeC.anchor, hingeC.normalToCenter2, Color.black, 100f);
-        //}
 
 
 
     }
     public float UpdateAngleA(float deg)
     {
-        //These seem to be rotating around the wrong axis
-        print("HERE");
-        float returnAngle = UpdateFlap( deg, hingeA);
+
+        float returnAngle = UpdateFlap(deg, hingeA);
         if(hingeA.updatedAngle < 1)
         {
             if (!myStack1.Contains(faceA))
@@ -700,6 +690,15 @@ public class MyScript : MonoBehaviour
     }
     private float UpdateFlap(float deg, MyHinge hinge)
     {
+        if (hinge.updatedAngle + deg > 360)
+        {
+            
+            deg = 360 - hinge.updatedAngle;
+        }
+        if (hinge.updatedAngle + deg < 0)
+        {
+            deg = 0 - hinge.updatedAngle;
+        }
         //figure out which side
         if (hinge.go1.name.Equals("abcd"))
             MyHinge.lockedFaces.Add(hinge.polygon1);
