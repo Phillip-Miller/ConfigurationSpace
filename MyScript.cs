@@ -237,7 +237,6 @@ class MyHinge //everything in here is in world space !!
     public Vector3 orthogonalV2;
     public List<MyHinge> connectedHinges = new List<MyHinge>();
     public Vector3 normalToCenter1;
-    
     public Vector3 normalToCenter2;
 
     public static List<Polygon> lockedFaces = new List<Polygon>();
@@ -245,7 +244,8 @@ class MyHinge //everything in here is in world space !!
     public GameObject go2;
 
     public float updatedAngle;
-    
+    public float lowerBound;
+    public float upperBound;
     public MyHinge(Polygon Polygon1, Polygon Polygon2,Vector3 axisPointA, Vector3 axisPointB)
     {
         polygon1 = Polygon1;
@@ -534,6 +534,11 @@ class MyHinge //everything in here is in world space !!
         this.anchor = (axisPointA + axisPointB) / 2;
         this.axis = axisPointA - axisPointB;
     }
+    public void setBounds(float lowerBound, float upperBound)
+    {
+        this.lowerBound = lowerBound;
+        this.upperBound = upperBound;
+    }
 
     public override int GetHashCode()
     {
@@ -545,6 +550,7 @@ class MyHinge //everything in here is in world space !!
         return base.ToString();
     }
 }
+
 
 public class MyScript : MonoBehaviour
 {
@@ -599,7 +605,6 @@ public class MyScript : MonoBehaviour
 
     void Start()
     {
-        //myPlygon changes go but hinges are made before that....
 
         parentModel = this.gameObject;
         allGameObj = FindAllGameObjects(); //find and curate list of all viewable faces
@@ -620,6 +625,44 @@ public class MyScript : MonoBehaviour
 
         Time.fixedDeltaTime = 0.01f;
         //c and angle across from it
+        LabelGlobalHinges(uniqueHinges);
+        LabelGlobalFaces(allGameObj);
+        findNormals();
+        createHingeTrackers();
+        myStack1.Add(faceABCD); //abcd should always be on stack1
+       
+    }
+
+    private void createHingeTrackers()
+    {
+        AaxisPoint1 = new GameObject("AaxisPoint1");
+        AaxisPoint2 = new GameObject("AaxisPoint2");
+        BaxisPoint1 = new GameObject("BaxisPoint1");
+        BaxisPoint2 = new GameObject("BaxisPoint2");
+
+        AaxisPoint1.transform.Translate(hingeA.axisPointA);
+        AaxisPoint2.transform.Translate(hingeA.axisPointB);
+        BaxisPoint1.transform.Translate(hingeB.axisPointA);
+        BaxisPoint2.transform.Translate(hingeB.axisPointB);
+
+        AaxisPoint1.transform.SetParent(faceABCD.transform);
+        AaxisPoint2.transform.SetParent(faceABCD.transform);
+        BaxisPoint1.transform.SetParent(faceABCD.transform);
+        BaxisPoint2.transform.SetParent(faceABCD.transform);
+    }
+
+    private void LabelGlobalFaces(GameObject[] allGameObj)
+    {
+        faceA = allGameObj.Where(go => go.name.Equals("a")).First();
+        faceB = allGameObj.Where(go => go.name.Equals("b")).First();
+        faceC = allGameObj.Where(go => go.name.Equals("c")).First();
+        faceDandOpp = allGameObj.Where(go => go.name.Equals("d&opp")).First();
+        faceABCD = allGameObj.Where(go => go.name.Equals("abcd")).First();
+        faceOpp = allGameObj.Where(go => go.name.Equals("opp")).First();
+    }
+
+    private void LabelGlobalHinges(List<MyHinge> uniqueHinges)
+    {
         hingeC = uniqueHinges.Where(hinge => hinge.go1.name.Contains("c") && hinge.go2.name.Contains("c")).First(); //hopefully there is only 1
         hingeA = uniqueHinges.Where(hinge => hinge.go1.name.Contains("a") && hinge.go2.name.Contains("a")).First();
         hingeB = uniqueHinges.Where(hinge => hinge.go1.name.Contains("b") && hinge.go2.name.Contains("b")).First();
@@ -644,43 +687,8 @@ public class MyScript : MonoBehaviour
         }
         hingeC.connectedHinges.Add(hingeA);
         hingeC.connectedHinges.Add(hingeB);
-
-        faceA = allGameObj.Where(go => go.name.Equals("a")).First();
-        faceB = allGameObj.Where(go => go.name.Equals("b")).First();
-        faceC = allGameObj.Where(go => go.name.Equals("c")).First();
-        faceDandOpp = allGameObj.Where(go => go.name.Equals("d&opp")).First();
-        faceABCD = allGameObj.Where(go => go.name.Equals("abcd")).First();
-        faceOpp = allGameObj.Where(go => go.name.Equals("opp")).First();
-
-        findNormals();
-
-        AaxisPoint1 = new GameObject("AaxisPoint1");
-        AaxisPoint2 = new GameObject("AaxisPoint2");
-        BaxisPoint1 = new GameObject("BaxisPoint1");
-        BaxisPoint2 = new GameObject("BaxisPoint2");
-
-        AaxisPoint1.transform.Translate(hingeA.axisPointA);
-        AaxisPoint2.transform.Translate(hingeA.axisPointB);
-        BaxisPoint1.transform.Translate(hingeB.axisPointA);
-        BaxisPoint2.transform.Translate(hingeB.axisPointB);
-
-        AaxisPoint1.transform.SetParent(faceABCD.transform);
-        AaxisPoint2.transform.SetParent(faceABCD.transform);
-        BaxisPoint1.transform.SetParent(faceABCD.transform);
-        BaxisPoint2.transform.SetParent(faceABCD.transform);
-
-
-        //Debugger = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        //Debugger.name = "DEBUGGER";
-        //Debugger.transform.localScale = .2f * Vector3.one;
-
-        //I want to attach axisA and axisB to face abcd and then I can just track that and update it in the fixed update
-        //UpdateAngleA(userAngleA - flapA.updatedAngle);
-        //UpdateAngleB(userAngleB - flapB.updatedAngle);
-        //UpdateAngleC(userAngleC - hingeC.updatedAngle); //pass in a delta
-        //UpdateAngleD((360 - userAngleD) - hingeD.updatedAngle);
-        //UpdateAngleD(-hingeD.updatedAngle);
     }
+
     String stackPrint(List<GameObject> myStack)
     {
         String returnString = "";
@@ -708,10 +716,10 @@ public class MyScript : MonoBehaviour
 
 
     }
+   
     public float UpdateAngleA(float deg)
     {
         float returnAngle = UpdateFlap(deg, hingeA);
-        print(hingeA.updatedAngle);
 
         if (hingeA.updatedAngle < 1)
         {
@@ -720,7 +728,6 @@ public class MyScript : MonoBehaviour
         }
         if (hingeA.updatedAngle > 359)
         {
-            print("angle over 359");
             if (!myStack1.Contains(faceA))
                 myStack1.Add(faceA);
         }
@@ -747,15 +754,42 @@ public class MyScript : MonoBehaviour
     }
     private float UpdateFlap(float deg, MyHinge hinge)
     {
-        if (hinge.updatedAngle + deg > 360)
+        MyHinge otherHinge = hinge == hingeA ? hingeB : hingeA;
+
+        //Open
+        //FlapOpenBounds(hinge, otherHinge);
+        
+       
+
+
+
+
+
+
+
+        //check for hitting abcd
+        if ((hinge.updatedAngle == 360 && deg > 0) || (hinge.updatedAngle == 0 && deg < 0))
+            deg = 0;
+        else if (hinge.updatedAngle + deg > 360)
         {
-            
             deg = 360 - hinge.updatedAngle;
         }
-        if (hinge.updatedAngle + deg < 0)
+        else if (hinge.updatedAngle + deg < 0)
         {
             deg = 0 - hinge.updatedAngle;
         }
+
+        //trapped hinge
+        if (hinge.updatedAngle == 0 && otherHinge.updatedAngle > 270) //youre trapped under the other hinge
+            deg = 0;
+
+
+
+
+
+
+
+
         //figure out which side
         if (hinge.go1.name.Equals("abcd"))
             MyHinge.lockedFaces.Add(hinge.polygon1);
@@ -765,6 +799,49 @@ public class MyScript : MonoBehaviour
         MyHinge.lockedFaces.RemoveAt(MyHinge.lockedFaces.Count - 1); //removes the polyygon we just added
         return returnAngle;
     }
+
+    private void FlapOpenBounds(MyHinge hinge, MyHinge otherHinge)
+    {
+        if (hingeC.updatedAngle == 0 || hingeC.updatedAngle == 90 || hingeC.updatedAngle == 180)
+        {
+            if(otherHinge.updatedAngle == 0 || otherHinge.updatedAngle == 360 || (otherHinge.updatedAngle >= 90 && otherHinge.updatedAngle <= 270))
+            {
+                hinge.setBounds(0, 360);
+            }
+            else if(otherHinge.updatedAngle > 0 && otherHinge.updatedAngle <= 60)
+            {
+                hinge.setBounds(90 - otherHinge.updatedAngle / 2, 360);
+            }
+            else if(otherHinge.updatedAngle > 60 && otherHinge.updatedAngle <= 90)
+            {
+                hinge.setBounds(180 - 2 * otherHinge.updatedAngle, 360);
+            }
+            else if(otherHinge.updatedAngle > 270 && otherHinge.updatedAngle <= 300)
+            {
+                hinge.setBounds(0, 900 - 2 * otherHinge.updatedAngle);
+            }
+            else if (otherHinge.updatedAngle > 300 && otherHinge.updatedAngle < 360)
+            {
+                hinge.setBounds(0, 450 - otherHinge.updatedAngle/2);
+            }
+        }
+        else if(hingeC.updatedAngle < 180) //0,90,180 covered in first if 
+        {
+            if(otherHinge.updatedAngle >=90 && otherHinge.updatedAngle <= 270)
+            {
+                hinge.setBounds(90, 360);
+            }
+            else if(otherHinge.updatedAngle > 270 && otherHinge.updatedAngle<= 300)
+            {
+                hinge.setBounds(90, 900 - 2 * otherHinge.updatedAngle);
+            }
+            else if (otherHinge.updatedAngle > 300 && otherHinge.updatedAngle < 360)
+            {
+                hinge.setBounds(90, 450 - otherHinge.updatedAngle / 2);
+            }
+        }
+    }
+
     public float UpdateAngleD(float deg)
     {
         
