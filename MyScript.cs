@@ -8,7 +8,8 @@ using UnityEngine;
  * Angle D will be tracked as inside and converted upon inputs if needed
  * 
  * TODO LIST
- * having anchor and alt anchor parent game objects seems to be creating issues. Can I do all math from the center of a piece or not?
+ * Hinge axis is tracking correctly issue is with altParentTracker being created too late and then being in the wrong place
+ * I will have all the hinges done from the corner I just need to just fix the axis to rotate around
  * @Author Phillip MIller
  * @Date 6/21/2021
  */
@@ -267,34 +268,41 @@ class MyHinge //everything in here is in world space !!
 
     }
     /// <summary>
-    /// in order to rotate to rotate around someone elses anchor
+    /// in order to rotate to rotate around someone elses anchor.
+    /// Only works for one alternate anchor, assuming further uses want the same anchor
+    /// this will be the outermost parent altTrackingParent,TrackingParent,GameObject
+    ///@FIXME make sure to run normal getTranslateParent Before hand
     /// </summary>
     /// <param name="firstGo"></param>
     /// <param name="altAnchor"></param> anchor of another game object you wish to rotate around 
     /// <returns></returns>
-    
-
-    private GameObject GetTranslateParent(bool firstGo, Vector3 altAnchor) //for use in rotating around a different gameObject's hinge, this will be the outermost parent altTrackingParent,TrackingParent,GameObject
-        //@FIXME make sure to run normal getTranslateParent Before hand
+    private GameObject GetTranslateParent(bool firstGo, Vector3 altAnchor) //@PREFORMANCE
     {
         
         GameObject child;
         if (firstGo)
         {
-            if (this.go1.transform.parent.parent != null && this.go1.transform.parent.parent.name.Equals("AltTrackingParent"))
-            { 
-                return this.go1.transform.parent.parent.gameObject;
+            if (this.go1.transform.parent != null && this.go1.transform.parent.position == altAnchor)
+            {
+                return this.go1.transform.parent.gameObject;
             }
             child = this.go1;
         }
         else
         {
-            if (this.go2.transform.parent.parent != null && this.go2.transform.parent.parent.name.Equals("AltTrackingParent"))
+            if (this.go2.transform.parent != null && this.go2.transform.parent.position == altAnchor)
                 return this.go2.transform.parent.gameObject;
             child = this.go2;
         }
+        
+        if(child.transform.parent != null)
+        {
+            GameObject oldParent = child.transform.parent.gameObject;
+            child.transform.parent = null;
+            GameObject.Destroy(oldParent);
+        }
         GameObject parent = new GameObject("AltTrackingParent");
-        parent.transform.Translate(altAnchor);
+        parent.transform.position = altAnchor;
         child.transform.parent = parent.transform;
         return parent; 
     }
@@ -303,13 +311,13 @@ class MyHinge //everything in here is in world space !!
 
         GameObject child;
         GameObject oldParent;
-        if (this.go1.transform.parent != null && this.go1.transform.parent.name != "TrackingParent") 
+        if (this.go1.transform.parent != null && !this.go1.transform.parent.name.Contains("Parent") )
         {
             oldParent = this.go1.transform.parent.gameObject;
             this.go1.transform.parent = null;
             GameObject.Destroy(oldParent);
         }
-        if (this.go2.transform.parent != null && this.go2.transform.parent.name != "TrackingParent")
+        if (this.go2.transform.parent != null && !this.go2.transform.parent.name.Contains("Parent"))
         {
             oldParent = this.go2.transform.parent.gameObject;
             this.go2.transform.parent = null;
@@ -331,10 +339,10 @@ class MyHinge //everything in here is in world space !!
             }
                 child = this.go2;
         }
-        //GameObject parent = new GameObject("TrackingParent");
-        GameObject parent = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        parent.name = "TrackingParent";
-        parent.transform.localScale = .2f * Vector3.one;
+        GameObject parent = new GameObject("TrackingParent");
+        //GameObject parent = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        //parent.name = "TrackingParent";
+        //parent.transform.localScale = .2f * Vector3.one;
         parent.transform.Translate(this.anchor);
         child.transform.parent = parent.transform;
         return parent;
@@ -344,7 +352,7 @@ class MyHinge //everything in here is in world space !!
     {
         this.orthogonalV1 = this.polygon1.getMiddle() - this.anchor;
         this.orthogonalV2 = this.polygon2.getMiddle() - this.anchor;
-        
+     
        
     }
 
@@ -396,11 +404,14 @@ class MyHinge //everything in here is in world space !!
 
     private void RotateAroundPivot(bool firstGo, float deg, bool updateValueOnly = false) 
     {
-        //@FIXME need to update hinge axis as the shape moves
-        GameObject parent = this.GetTranslateParent(firstGo);
+        GameObject parent;
+        if ((this.go1.name.Contains("a") && this.go2.name.Contains("a")) || (this.go1.name.Contains("b") && this.go2.name.Contains("b"))){
+            parent = this.GetTranslateParent(!this.go1.name.Contains("abcd"), this.anchor);
+        }
+        else
+            parent = this.GetTranslateParent(firstGo);
         parent.transform.Rotate(this.axis, deg);
-        Debug.DrawRay(this.anchor, this.axis, Color.red, 10f);
-        Quaternion rotation = Quaternion.AngleAxis(deg, this.axis);
+        Quaternion rotation = Quaternion.AngleAxis(-deg, this.axis);
         
        
         //zfighting
@@ -414,17 +425,17 @@ class MyHinge //everything in here is in world space !!
         }
         //DrawNormalToCenters();
 
-        //this is to move the flaps in sync with face ABCD @fixme update flaps
         if ((this.go1.name.Contains("abcd") || this.go2.name.Contains("abcd")) && firstGo) //added first go to make sure this only gets executed one time
         {
             foreach (MyHinge hinge in this.connectedHinges)
             {
-                //@FIXME something is going wrong here
+                
                 bool FlapIsFirstGo = !this.go1.name.Contains("abcd"); //we want to move the non abcd face (flapA and flapB)
                 hinge.GetTranslateParent(FlapIsFirstGo, this.anchor).transform.Rotate(this.axis, -deg); //want to update axisPointA,AxisPointB and then recalculate anchor as well
-                hinge.axisPointA = rotation.normalized * hinge.axisPointA;
-                hinge.axisPointB = rotation.normalized * hinge.axisPointB;
-                hinge.anchor = (hinge.axisPointA + hinge.axisPointB) / 2;
+                //hinge.axisPointA = rotation.normalized * hinge.axisPointA;
+                //hinge.axisPointB = rotation.normalized * hinge.axisPointB;
+                //hinge.axis = rotation.normalized * hinge.axis;
+                //hinge.anchor = (hinge.axisPointA + hinge.axisPointB) / 2;
                 if (FlapIsFirstGo) //update ortho
                 {
                     hinge.orthogonalV1 = rotation.normalized * hinge.orthogonalV1; //order matters 
@@ -449,15 +460,17 @@ class MyHinge //everything in here is in world space !!
         
 
     }
-    public void TranslateHinge(float dX, bool updateValueOnly) 
+    public void TranslateHinge(float dX, bool updateValueOnly) //@FIXME this is where i am messing up the axis
     {
         dX *= -1;
         orthogonalV1 += ((orthogonalV1 + orthogonalV2) / 2).normalized * dX; 
         orthogonalV2 += ((orthogonalV2 + orthogonalV2) / 2).normalized * dX;
+        
         this.axisPointA += this.moveDirection * dX;
         this.axisPointB += this.moveDirection * dX;
-        this.axis = axisPointA - axisPointB; //should I actually be subtracting here
-        this.anchor = (axisPointA + axisPointB) / 2;
+        this.axis = this.axisPointA - this.axisPointB; 
+        this.anchor = (this.axisPointA + this.axisPointB) / 2;
+
         if (updateValueOnly)
             return;
         this.GetTranslateParent(true).transform.Translate(this.moveDirection * dX, Space.World);
@@ -467,12 +480,14 @@ class MyHinge //everything in here is in world space !!
 
             foreach (MyHinge hinge in this.connectedHinges)
             {
-                orthogonalV1 += this.moveDirection * dX;
-                orthogonalV2 += this.moveDirection * dX;
-                hinge.axisPointA += this.moveDirection * dX;
-                hinge.axisPointB += this.moveDirection * dX;
-                hinge.axis = axisPointA - axisPointB; //should I actually be subtracting here
-                hinge.anchor = (axisPointA + axisPointB) / 2;
+                
+                //if we are adjusting hinge c 
+                //orthogonalV1 += this.moveDirection * dX;
+                //orthogonalV2 += this.moveDirection * dX;
+                //hinge.axisPointA += (this.moveDirection * dX);
+                //hinge.axisPointB += (this.moveDirection * dX);
+                //hinge.axis = hinge.axisPointA - hinge.axisPointB; //should I actually be subtracting here @FIXME @FIXME @FIXME
+                //hinge.anchor = (hinge.axisPointA + hinge.axisPointB) / 2;
                 bool first = !hinge.go1.name.Equals("abcd");
                 hinge.GetTranslateParent(first,this.anchor).transform.Translate(this.moveDirection * dX, Space.World);
             }
@@ -506,6 +521,18 @@ class MyHinge //everything in here is in world space !!
         {
             Debug.DrawLine(this.polygon2.getMiddle(), normalToCenter2, Color.yellow, 50f);
         }
+    }
+    /// <summary>
+    /// Designed for use specefically in updating the values of the axis for the flaps to rotate around
+    /// </summary>
+    /// <param name="axisPointA"></param>
+    /// <param name="axisPointB"></param>
+    public void updateFromAxisPoints(Vector3 axisPointA, Vector3 axisPointB)
+    {
+        this.axisPointA = axisPointA;
+        this.axisPointB = axisPointB;
+        this.anchor = (axisPointA + axisPointB) / 2;
+        this.axis = axisPointA - axisPointB;
     }
 
     public override int GetHashCode()
@@ -548,6 +575,11 @@ public class MyScript : MonoBehaviour
     GameObject faceDandOpp;
     GameObject faceABCD;
     GameObject faceOpp;
+    GameObject AaxisPoint1;
+    GameObject AaxisPoint2;
+    GameObject BaxisPoint1;
+    GameObject BaxisPoint2;
+    GameObject Debugger;
 
     public float Z_DISPLACEMENT;
 
@@ -622,8 +654,27 @@ public class MyScript : MonoBehaviour
 
         findNormals();
 
-        //@FIXME need to assign all faceC and jazz
+        AaxisPoint1 = new GameObject("AaxisPoint1");
+        AaxisPoint2 = new GameObject("AaxisPoint2");
+        BaxisPoint1 = new GameObject("BaxisPoint1");
+        BaxisPoint2 = new GameObject("BaxisPoint2");
 
+        AaxisPoint1.transform.Translate(hingeA.axisPointA);
+        AaxisPoint2.transform.Translate(hingeA.axisPointB);
+        BaxisPoint1.transform.Translate(hingeB.axisPointA);
+        BaxisPoint2.transform.Translate(hingeB.axisPointB);
+
+        AaxisPoint1.transform.SetParent(faceABCD.transform);
+        AaxisPoint2.transform.SetParent(faceABCD.transform);
+        BaxisPoint1.transform.SetParent(faceABCD.transform);
+        BaxisPoint2.transform.SetParent(faceABCD.transform);
+
+
+        //Debugger = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        //Debugger.name = "DEBUGGER";
+        //Debugger.transform.localScale = .2f * Vector3.one;
+
+        //I want to attach axisA and axisB to face abcd and then I can just track that and update it in the fixed update
         //UpdateAngleA(userAngleA - flapA.updatedAngle);
         //UpdateAngleB(userAngleB - flapB.updatedAngle);
         //UpdateAngleC(userAngleC - hingeC.updatedAngle); //pass in a delta
@@ -641,6 +692,9 @@ public class MyScript : MonoBehaviour
     }
     private void Update()
     {
+        //Debugger.transform.position = hingeA.anchor;
+        hingeA.updateFromAxisPoints(AaxisPoint1.transform.position, AaxisPoint2.transform.position);
+        hingeB.updateFromAxisPoints(BaxisPoint1.transform.position, BaxisPoint2.transform.position);
     }
 
     void FixedUpdate() //update commands are all in deltas (how much you want them to move)
@@ -648,6 +702,7 @@ public class MyScript : MonoBehaviour
         
         if(myStack1.Count > 1)
             print(stackPrint(myStack1));
+        Debug.DrawRay(hingeA.anchor, hingeA.axis, Color.cyan, 1f);
         zOffset();
 
 
@@ -655,15 +710,17 @@ public class MyScript : MonoBehaviour
     }
     public float UpdateAngleA(float deg)
     {
-
         float returnAngle = UpdateFlap(deg, hingeA);
-        if(hingeA.updatedAngle < 1)
+        print(hingeA.updatedAngle);
+
+        if (hingeA.updatedAngle < 1)
         {
             if (!myStack1.Contains(faceA))
                 myStack1.Insert(0, faceA);
         }
         if (hingeA.updatedAngle > 359)
         {
+            print("angle over 359");
             if (!myStack1.Contains(faceA))
                 myStack1.Add(faceA);
         }
@@ -774,12 +831,12 @@ public class MyScript : MonoBehaviour
             return 0;
         if (angleC + deg < 0) //snap to 0
         {
-            print("BOUND CONDITION 2");
+            print("BOUND CONDITION 1");
             deg = 0 - angleC;
         }
         if(angleC + deg > 360) //snap to 360
         {
-            print("BOUND CONDITION 1");
+            print("BOUND CONDITION 2");
             deg = 360 - angleC;
         }
         if (angleC >= 180) // @ fixme need to track dandopp[1]
@@ -1268,15 +1325,7 @@ public class MyScript : MonoBehaviour
         return combined.ToList<int>();
     }
 
-    double CalculateVolume(List<Triangle> faces)
-    {
-        return 0.0;
-    }
-    void CreateLabels()
-    {
-        return;
-    }
-    
-
+   
+   
 }
  
