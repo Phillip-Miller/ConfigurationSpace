@@ -10,6 +10,7 @@ using UnityEngine;
  * TODO LIST
  * Hinge axis is tracking correctly issue is with altParentTracker being created too late and then being in the wrong place
  * I will have all the hinges done from the corner I just need to just fix the axis to rotate around
+ * need to call flapopenbounds and use whatever hinge.setbounds sets
  * @Author Phillip MIller
  * @Date 6/21/2021
  */
@@ -799,48 +800,121 @@ public class MyScript : MonoBehaviour
         MyHinge.lockedFaces.RemoveAt(MyHinge.lockedFaces.Count - 1); //removes the polyygon we just added
         return returnAngle;
     }
+    private void singleStarBounds(MyHinge selectedFlap, MyHinge otherFlap)
+    {
+        if (otherFlap.updatedAngle == 0 || otherFlap.updatedAngle == 360 || (otherFlap.updatedAngle >= 90 && otherFlap.updatedAngle <= 270))
+        {
+            selectedFlap.setBounds(0, 360);
+        }
+        else if (otherFlap.updatedAngle > 0 && otherFlap.updatedAngle <= 60)
+        {
+            selectedFlap.setBounds(90 - otherFlap.updatedAngle / 2, 360);
+        }
+        else if (otherFlap.updatedAngle > 60 && otherFlap.updatedAngle <= 90)
+        {
+            selectedFlap.setBounds(180 - 2 * otherFlap.updatedAngle, 360);
+        }
+        else if (otherFlap.updatedAngle > 270 && otherFlap.updatedAngle <= 300)
+        {
+            selectedFlap.setBounds(0, 900 - 2 * otherFlap.updatedAngle);
+        }
+        else if (otherFlap.updatedAngle > 300 && otherFlap.updatedAngle < 360)
+        {
+            selectedFlap.setBounds(0, 450 - otherFlap.updatedAngle / 2);
+        }
+    }
+    private void doubleStarBounds(MyHinge selectedFlap, MyHinge otherFlap)
+    {
+        if (otherFlap.updatedAngle >= 90 && otherFlap.updatedAngle <= 270)
+        {
+            selectedFlap.setBounds(90, 360);
+        }
+        else if (otherFlap.updatedAngle > 270 && otherFlap.updatedAngle <= 300)
+        {
+            selectedFlap.setBounds(90, 900 - 2 * otherFlap.updatedAngle);
+        }
+        else if (otherFlap.updatedAngle > 300 && otherFlap.updatedAngle < 360)
+        {
+            selectedFlap.setBounds(90, 450 - otherFlap.updatedAngle / 2);
+        }
+    }
 
-    private void FlapOpenBounds(MyHinge hinge, MyHinge otherHinge)
+    private void tripleStarBounds(MyHinge selectedFlap, MyHinge otherFlap)
+    {
+        if (otherFlap.updatedAngle >= 0 && otherFlap.updatedAngle <= 60)
+        {
+            selectedFlap.setBounds(90 - otherFlap.updatedAngle / 2, 270);
+        }
+        else if (otherFlap.updatedAngle > 60 && otherFlap.updatedAngle <= 90)
+        {
+            selectedFlap.setBounds(180 - 2 * otherFlap.updatedAngle, 270);
+        }
+        else if (otherFlap.updatedAngle > 90 && otherFlap.updatedAngle <= 270)
+        {
+            selectedFlap.setBounds(0, 270);
+        }
+    }
+    /// <summary>
+    /// Delta = gamma + 180
+    /// 0 <= gamma <- 180
+    /// note hingeC is a representation of gamma
+    /// </summary>
+    /// <param name="selectedFlap"></param> flap that you are requesting to move
+    /// <param name="otherFlap"></param> the other flap in the equation
+    private void FlapOpenBounds(MyHinge selectedFlap, MyHinge otherFlap)
     {
         if (hingeC.updatedAngle == 0 || hingeC.updatedAngle == 90 || hingeC.updatedAngle == 180)
         {
-            if(otherHinge.updatedAngle == 0 || otherHinge.updatedAngle == 360 || (otherHinge.updatedAngle >= 90 && otherHinge.updatedAngle <= 270))
-            {
-                hinge.setBounds(0, 360);
-            }
-            else if(otherHinge.updatedAngle > 0 && otherHinge.updatedAngle <= 60)
-            {
-                hinge.setBounds(90 - otherHinge.updatedAngle / 2, 360);
-            }
-            else if(otherHinge.updatedAngle > 60 && otherHinge.updatedAngle <= 90)
-            {
-                hinge.setBounds(180 - 2 * otherHinge.updatedAngle, 360);
-            }
-            else if(otherHinge.updatedAngle > 270 && otherHinge.updatedAngle <= 300)
-            {
-                hinge.setBounds(0, 900 - 2 * otherHinge.updatedAngle);
-            }
-            else if (otherHinge.updatedAngle > 300 && otherHinge.updatedAngle < 360)
-            {
-                hinge.setBounds(0, 450 - otherHinge.updatedAngle/2);
-            }
+            singleStarBounds(selectedFlap, otherFlap);
         }
-        else if(hingeC.updatedAngle < 180) //0,90,180 covered in first if 
+        else if(hingeC.updatedAngle < 180) // If 0 < gamma < 90; 90 < gamma < 180
         {
-            if(otherHinge.updatedAngle >=90 && otherHinge.updatedAngle <= 270)
-            {
-                hinge.setBounds(90, 360);
-            }
-            else if(otherHinge.updatedAngle > 270 && otherHinge.updatedAngle<= 300)
-            {
-                hinge.setBounds(90, 900 - 2 * otherHinge.updatedAngle);
-            }
-            else if (otherHinge.updatedAngle > 300 && otherHinge.updatedAngle < 360)
-            {
-                hinge.setBounds(90, 450 - otherHinge.updatedAngle / 2);
-            }
+            doubleStarBounds(selectedFlap, otherFlap);
         }
     }
+    /// <summary>
+    /// Delta = 360
+    /// </summary>
+    /// <param name="selectedFlap"></param>
+    /// <param name="otherFlap"></param>
+    private void FlapDeltaLocked(MyHinge selectedFlap, MyHinge otherFlap)
+    {
+        if (hingeC.updatedAngle <= 0 || hingeC.updatedAngle >= 360 || (hingeC.updatedAngle >= 90 && hingeC.updatedAngle <= 270)) //relationship equal to * 
+        {
+            singleStarBounds(selectedFlap, otherFlap);
+
+        }
+        else if(hingeC.updatedAngle>= 0 && hingeC.updatedAngle <= 90) //same as **
+        {
+            doubleStarBounds(selectedFlap, otherFlap);
+        }
+        else if(hingeC.updatedAngle >270 && hingeC.updatedAngle < 360) //relationship *** below
+        {
+            tripleStarBounds(selectedFlap, otherFlap);
+
+        }        
+    }
+    /// <summary>
+    /// gamma = 0
+    /// </summary>
+    /// <param name="selectedFlap"></param>
+    /// <param name="otherFlap"></param>
+    private void FlapGammaLocked(MyHinge selectedFlap, MyHinge otherFlap)
+    {
+        if(hingeD.updatedAngle == 0 || hingeD.updatedAngle == 360 || (hingeD.updatedAngle >= 90 && hingeD.updatedAngle <= 270))  //same as *
+        {
+            singleStarBounds(selectedFlap, otherFlap);
+        }
+        if(hingeD.updatedAngle > 0 && hingeD.updatedAngle < 90) //same as ***
+        {
+            tripleStarBounds(selectedFlap, otherFlap);
+        }
+        if(hingeD.updatedAngle > 270 && hingeD.updatedAngle < 360) //same as **
+        {
+            doubleStarBounds(selectedFlap, otherFlap);
+        }        
+    }
+
 
     public float UpdateAngleD(float deg)
     {
