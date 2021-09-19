@@ -11,6 +11,8 @@ using UnityEngine;
  * Hinge axis is tracking correctly issue is with altParentTracker being created too late and then being in the wrong place
  * I will have all the hinges done from the corner I just need to just fix the axis to rotate around
  * need to call flapopenbounds and use whatever hinge.setbounds sets
+ * zOffset still messed up
+ * implement logic for if something is inside of the box.
  * @Author Phillip MIller
  * @Date 6/21/2021
  */
@@ -261,6 +263,7 @@ class MyHinge //everything in here is in world space !!
         calculateOrthogonalHinge();
         this.updatedAngle = this.GetAngle();
         this.moveDirection = ((orthogonalV1 + orthogonalV2) / 2).normalized;
+        this.setBounds(0, 360);
     }
     public void updateGo()
     {
@@ -756,40 +759,12 @@ public class MyScript : MonoBehaviour
     private float UpdateFlap(float deg, MyHinge hinge)
     {
         MyHinge otherHinge = hinge == hingeA ? hingeB : hingeA;
+        calcFlapMovement(hinge, otherHinge);
 
-        //Open
-        //FlapOpenBounds(hinge, otherHinge);
-        
-       
-
-
-
-
-
-
-
-        //check for hitting abcd
-        if ((hinge.updatedAngle == 360 && deg > 0) || (hinge.updatedAngle == 0 && deg < 0))
-            deg = 0;
-        else if (hinge.updatedAngle + deg > 360)
-        {
-            deg = 360 - hinge.updatedAngle;
-        }
-        else if (hinge.updatedAngle + deg < 0)
-        {
-            deg = 0 - hinge.updatedAngle;
-        }
-
-        //trapped hinge
-        if (hinge.updatedAngle == 0 && otherHinge.updatedAngle > 270) //youre trapped under the other hinge
-            deg = 0;
-
-
-
-
-
-
-
+        if (deg + hinge.updatedAngle > hinge.upperBound)
+            deg = hinge.upperBound - hinge.updatedAngle;
+        if (deg + hinge.updatedAngle < hinge.lowerBound)
+            deg = hinge.lowerBound - hinge.updatedAngle;
 
         //figure out which side
         if (hinge.go1.name.Equals("abcd"))
@@ -856,7 +831,7 @@ public class MyScript : MonoBehaviour
     }
     /// <summary>
     /// Delta = gamma + 180
-    /// 0 <= gamma <- 180
+    /// 0 <= gamma <= 180
     /// note hingeC is a representation of gamma
     /// </summary>
     /// <param name="selectedFlap"></param> flap that you are requesting to move
@@ -873,7 +848,7 @@ public class MyScript : MonoBehaviour
         }
     }
     /// <summary>
-    /// Delta = 360
+    /// Delta = 0
     /// </summary>
     /// <param name="selectedFlap"></param>
     /// <param name="otherFlap"></param>
@@ -914,18 +889,69 @@ public class MyScript : MonoBehaviour
             doubleStarBounds(selectedFlap, otherFlap);
         }        
     }
+    private void calcFlapMovement(MyHinge selectedFlap, MyHinge otherFlap)
+    {
+        if(hingeC.updatedAngle <= 180 && hingeC.updatedAngle != 0)
+        {
+            FlapOpenBounds( selectedFlap,  otherFlap);
+        }
+        else if(hingeC.updatedAngle == 0)
+        {
+            FlapGammaLocked(selectedFlap, otherFlap);
+        }
+        else if (hingeD.updatedAngle == 0)
+        {
+            FlapGammaLocked(selectedFlap, otherFlap);
+        }
+        else
+        {
+            Debug.Log("FAILED TO FIND HINGE BOUNDS");
+        }
+    }
+    //@TODO doing so much wrong here
+    private void calcInteriorMovement(MyHinge wantToMove,float deg) //@FIXME Hasty logic need to double check
+    {
+        if(hingeA.updatedAngle <= 90 || hingeB.updatedAngle <= 90) //possibly got something in the middle
+        {
+            if(hingeD.updatedAngle == 0)
+            {
+                hingeC.setBounds(90, hingeC.upperBound);
+            }
+            if(hingeC.updatedAngle == 0)
+            {
+                hingeD.setBounds(90, hingeD.upperBound);
+            }
+            else
+            {
+                //cant move anything at all
+            }
+        }
+        if(hingeA.updatedAngle >= 270 || hingeB.updatedAngle <= 270)
+        {
+            if (hingeD.updatedAngle == 0)
+            {
+                hingeC.setBounds(hingeC.lowerBound,270);
+            }
+            if (hingeC.updatedAngle == 0)
+            {
+                hingeD.setBounds(hingeD.lowerBound, 270);
+            }
+        }
+        return deg;
+    }
+
 
 
     public float UpdateAngleD(float deg)
     {
-        
+        print("Value of deg in d" + deg);
         if (hingeC.updatedAngle > 180)
         {
             Debug.Log("D Bound Condition");
             //hingeC.updateAngle(-deg);
             //interiorHinges[1].updateAngle(deg);
         }
-        if (hingeC.updatedAngle == 0)//@FIXME need to track DandOpp[1] here and adjust hinge location
+        if (hingeC.updatedAngle <= 0)//@FIXME need to track DandOpp[1] here and adjust hinge location
         {
             //Iff deg is pos that means opp will be on top
             //neg deg means c will be on top
@@ -978,8 +1004,11 @@ public class MyScript : MonoBehaviour
     {
         
         float angleC = hingeC.updatedAngle;
-        if ((angleC == 0 && deg < 0) || (angleC == 360 && deg > 0)) //cant move
+        if ((angleC <= 0 && deg < 0) || (angleC >= 360 && deg > 0)) //cant move
+        {
+            print("Bound condition 0" + angleC);
             return 0;
+        }
         if (angleC + deg < 0) //snap to 0
         {
             print("BOUND CONDITION 1");
