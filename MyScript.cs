@@ -846,6 +846,11 @@ public class MyScript : MonoBehaviour
         {
             doubleStarBounds(selectedFlap, otherFlap);
         }
+        else
+        {
+            selectedFlap.setBounds(0, 360);
+            otherFlap.setBounds(0, 360);
+        }
     }
     /// <summary>
     /// Delta = 0
@@ -867,7 +872,12 @@ public class MyScript : MonoBehaviour
         {
             tripleStarBounds(selectedFlap, otherFlap);
 
-        }        
+        }
+        else
+        {
+            selectedFlap.setBounds(0, 360);
+            otherFlap.setBounds(0, 360);
+        }
     }
     /// <summary>
     /// gamma = 0
@@ -887,13 +897,18 @@ public class MyScript : MonoBehaviour
         if(hingeD.updatedAngle > 270 && hingeD.updatedAngle < 360) //same as **
         {
             doubleStarBounds(selectedFlap, otherFlap);
-        }        
+        }
+        else
+        {
+            selectedFlap.setBounds(0, 360);
+            otherFlap.setBounds(0, 360);
+        }
     }
     private void calcFlapMovement(MyHinge selectedFlap, MyHinge otherFlap)
     {
         if(hingeC.updatedAngle <= 180 && hingeC.updatedAngle != 0)
         {
-            FlapOpenBounds( selectedFlap,  otherFlap);
+            FlapOpenBounds(selectedFlap,  otherFlap);
         }
         else if(hingeC.updatedAngle == 0)
         {
@@ -909,21 +924,24 @@ public class MyScript : MonoBehaviour
         }
     }
     //@TODO doing so much wrong here
-    private void calcInteriorMovement(MyHinge wantToMove,float deg) //@FIXME Hasty logic need to double check
+    private void checkForWingsInside() //@FIXME Hasty logic need to double check
     {
         if(hingeA.updatedAngle <= 90 || hingeB.updatedAngle <= 90) //possibly got something in the middle
         {
-            if(hingeD.updatedAngle == 0)
+            if(hingeD.updatedAngle == 0) //delta locked
             {
                 hingeC.setBounds(90, hingeC.upperBound);
+                hingeD.setBounds(0, 0);
             }
             if(hingeC.updatedAngle == 0)
             {
+                hingeC.setBounds(0, 0);
                 hingeD.setBounds(90, hingeD.upperBound);
             }
-            else
+            if(hingeC.updatedAngle == 90 && hingeD.updatedAngle ==90)
             {
-                //cant move anything at all
+                hingeC.setBounds(90, 90);
+                hingeD.setBounds(90, 90);
             }
         }
         if(hingeA.updatedAngle >= 270 || hingeB.updatedAngle <= 270)
@@ -937,14 +955,20 @@ public class MyScript : MonoBehaviour
                 hingeD.setBounds(hingeD.lowerBound, 270);
             }
         }
-        return deg;
     }
 
 
 
     public float UpdateAngleD(float deg)
     {
-        print("Value of deg in d" + deg);
+        checkForWingsInside();
+        if (deg + hingeD.updatedAngle > hingeD.upperBound)
+            deg = hingeD.upperBound - hingeD.updatedAngle;
+        if (deg + hingeD.updatedAngle < hingeD.lowerBound)
+            deg = hingeD.lowerBound - hingeD.updatedAngle;
+
+
+
         if (hingeC.updatedAngle > 180)
         {
             Debug.Log("D Bound Condition");
@@ -1002,7 +1026,13 @@ public class MyScript : MonoBehaviour
                                   //double translateAmmount = -1* (-.5 * squareLength * Math.Sin(Mathf.Deg2Rad*1*deg/2));
                                  //I will have interior angles[0] always be c
     {
-        
+        checkForWingsInside();
+        if (deg + hingeC.updatedAngle > hingeC.upperBound)
+            deg = hingeC.upperBound - hingeC.updatedAngle;
+        if (deg + hingeC.updatedAngle < hingeC.lowerBound)
+            deg = hingeC.lowerBound - hingeC.updatedAngle;
+
+
         float angleC = hingeC.updatedAngle;
         if ((angleC <= 0 && deg < 0) || (angleC >= 360 && deg > 0)) //cant move
         {
