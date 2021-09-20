@@ -23,25 +23,58 @@ public class Configuration : MonoBehaviour
     private Vector3 axisCEnd; //X2
 
 
-    GameObject parentModel;
+   
     GameObject tracker;
-    List<GameObject> allPieces = new List<GameObject>();
+    List<GameObject> allPiecesCDD = new List<GameObject>();
+    List<GameObject> allPiecesCnotDD = new List<GameObject>();
+    List<GameObject> allPiecesDnotDC = new List<GameObject>();
+
     static float UNITS_PER_DEGREE;
 
     // Start is called before the first frame update
     void Start()
     {
-        parentModel = this.gameObject;
         activeConfig = this.gameObject;
+
         findPieces();
         findOrigin();
         calculateScale(this.gameObject);
         createTracker();
         setPosition(new Vector4(360, 360, 180, 180));
-
+        createConfigParents();
 
     }
+    /// <summary>
+    /// Will create invisible parents to rotate each config around
+    /// </summary>
+    private void createConfigParents()
+    {
 
+        
+        GameObject parent1 = new GameObject("CDD_Parent");
+        parent1.transform.position = configurationSpaceOrigin;
+        activeConfig.transform.parent = parent1.transform;
+
+        //for CnotDD
+        Vector3 vertex2 = allPiecesCnotDD.Where(go => go.name.Equals("X1")).First().GetComponent<Renderer>().bounds.center;
+        GameObject parent2 = new GameObject("CnotDD_Parent");
+        parent2.transform.position =vertex2;
+        cNotDD.transform.parent = parent2.transform;
+       
+
+        //for DnotDC
+        Vector3 vertex3 = allPiecesDnotDC.Where(go => go.name.Equals("P1")).First().GetComponent<Renderer>().bounds.center;
+        GameObject parent3 = new GameObject("DnotDC_Parent");
+        parent3.transform.position = vertex3;
+        DNotDC.transform.parent = parent3.transform;
+
+        parent2.transform.position = configurationSpaceOrigin;
+        parent2.transform.Translate(-20 * Vector3.up);
+
+        parent3.transform.position = configurationSpaceOrigin;
+        parent3.transform.Translate(-20 * Vector3.up);
+
+    }
     private void createTracker()
     {
         tracker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -52,25 +85,33 @@ public class Configuration : MonoBehaviour
 
 
         //@FIXME Ill use word coordinates after all for maximum accuracy
-        axisAEnd = allPieces.Where(go => go.name.Equals("A7")).First().GetComponent<Renderer>().bounds.center;
-        axisBEnd = allPieces.Where(go => go.name.Equals("A3")).First().GetComponent<Renderer>().bounds.center;
-        axisCEnd = allPieces.Where(go => go.name.Equals("X2")).First().GetComponent<Renderer>().bounds.center;
+        axisAEnd = allPiecesCDD.Where(go => go.name.Equals("A7")).First().GetComponent<Renderer>().bounds.center;
+        axisBEnd = allPiecesCDD.Where(go => go.name.Equals("A3")).First().GetComponent<Renderer>().bounds.center;
+        axisCEnd = allPiecesCDD.Where(go => go.name.Equals("X2")).First().GetComponent<Renderer>().bounds.center;
 
-        print(Vector3.Distance(axisAEnd, configurationSpaceOrigin ));
-        print(Vector3.Distance(axisBEnd, configurationSpaceOrigin ));
-        print(Vector3.Distance(axisCEnd, configurationSpaceOrigin));
-        Debug.DrawRay(configurationSpaceOrigin, axisAEnd - configurationSpaceOrigin, Color.red, 100f);
-        Debug.DrawRay(configurationSpaceOrigin, axisBEnd - configurationSpaceOrigin, Color.blue, 100f);
-        Debug.DrawRay(configurationSpaceOrigin, axisCEnd - configurationSpaceOrigin, Color.yellow, 100f);
+        
+        
     }
 
     private void findPieces()
     {
-        
-        for (int i = 0; i < parentModel.transform.childCount; i++)
+        //this refering to CDD in defualt state
+        for (int i = 0; i < this.gameObject.transform.childCount; i++)
         {
-            GameObject child = parentModel.transform.GetChild(i).gameObject;
-            allPieces.Add(child);
+            GameObject child = this.gameObject.transform.GetChild(i).gameObject;
+            allPiecesCDD.Add(child);
+        }
+        //CnotDD
+        for (int i = 0; i < cNotDD.transform.childCount; i++)
+        {
+            GameObject child = cNotDD.transform.GetChild(i).gameObject;
+            allPiecesCnotDD.Add(child);
+        }
+        //DnotDC
+        for (int i = 0; i < DNotDC.transform.childCount; i++)
+        {
+            GameObject child = DNotDC.transform.GetChild(i).gameObject;
+            allPiecesDnotDC.Add(child);
         }
     }
 
@@ -79,7 +120,7 @@ public class Configuration : MonoBehaviour
     /// </summary>
     private void findOrigin()
     {   
-        configurationSpaceOrigin = allPieces.Where(go => go.name.Equals("X1")).First().GetComponent<Renderer>().bounds.center;
+        configurationSpaceOrigin = allPiecesCDD.Where(go => go.name.Equals("X1")).First().GetComponent<Renderer>().bounds.center;
     }
 
     //Scale of all of them should hopefully be the exact same
@@ -87,7 +128,7 @@ public class Configuration : MonoBehaviour
     private void calculateScale(GameObject go)
     {
         
-        Vector3 A3 = allPieces.Where(go => go.name.Equals("A3")).First().GetComponent<Renderer>().bounds.center;
+        Vector3 A3 = allPiecesCDD.Where(go => go.name.Equals("A3")).First().GetComponent<Renderer>().bounds.center;
         UNITS_PER_DEGREE = Vector3.Distance(configurationSpaceOrigin, A3) / 360;
         
         
@@ -96,8 +137,8 @@ public class Configuration : MonoBehaviour
     
     private void OnDrawGizmos()
     {
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawSphere(configurationSpaceOrigin, 5);
+        //Gizmos.color = Color.yellow;
+        //Gizmos.DrawSphere(configurationSpaceOrigin, 5);
 
     }
     // Update is called once per frame
@@ -109,9 +150,8 @@ public class Configuration : MonoBehaviour
 
     public void setPosition(Vector4 currentDegValues) //will use set instead of update to avoid creep over time
     {
-        Debug.Log("Setting position");
         //degrees (A,B,C,D) (xyzw)
-        checkConfig(currentDegValues);
+        checkConfig(currentDegValues); 
         Vector4 xyzwDistances = currentDegValues * UNITS_PER_DEGREE;
         float CDVector = (activeConfig == DNotDC ? xyzwDistances.w : xyzwDistances.z); //Y axis changes based off which configuration space we are in
         Vector3 finalLocation = configurationSpaceOrigin + xyzwDistances.x * (axisAEnd - configurationSpaceOrigin).normalized +
@@ -121,31 +161,30 @@ public class Configuration : MonoBehaviour
     }
     public void checkConfig(Vector4 currrentDegValues)
     {
+        //@FIXME this method is broken
         if(currrentDegValues.z > 180 && activeConfig != DNotDC)
         {
             Debug.Log("Switching to DNOTDC");
             switchConfig(DNotDC);
 
         }
-        if (currrentDegValues.z < 0 && activeConfig != cNotDD)
+        else if (currrentDegValues.z < 0 && activeConfig != cNotDD)
         {
             Debug.Log("Switching to CNOTDD");
-
             switchConfig(cNotDD);
 
         }
         else if (activeConfig != this.gameObject)// 0< c <180
         {
             Debug.Log("Switching to CDD");
-
             switchConfig(this.gameObject);
         }
     }
     public void switchConfig(GameObject nextConfig)
     {
-        //throwing errors
-        this.activeConfig.GetComponent<MeshRenderer>().enabled = false;
-        nextConfig.GetComponent<MeshRenderer>().enabled = true; 
+        print("switch Config");
+        this.activeConfig.transform.parent.Translate(Vector3.up * -20);
+        nextConfig.transform.parent.Translate(Vector3.up * 20);
         this.activeConfig = nextConfig;
     }
 }
