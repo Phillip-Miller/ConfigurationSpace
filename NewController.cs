@@ -43,15 +43,18 @@ public class NewController : MonoBehaviour
     }
     private void onAButton(InputAction.CallbackContext value)
     { //lock movement to once axis at once perhaps? espicially for the flaps.
-        Debug.Log("Abutton");
     }
     private void onFlapMovement(InputAction.CallbackContext value)
-    {
-        //@FIXME a little tricky to only move on one axis at once maybe implement jump
-        Debug.Log("onFlapMovement");
+    {  
         Vector2 inputMovement = value.ReadValue<Vector2>();
-        float aValue = Math.Abs(inputMovement.x) > .5 ? inputMovement.x : 0;
-        float bValue = Math.Abs(inputMovement.y) > .5 ? inputMovement.y : 0;
+        float aValue = inputMovement.x;
+        float bValue = inputMovement.y;
+
+        if (Math.Abs(aValue) > Math.Abs(bValue)) //only move one flap at a time
+            bValue = 0;
+        else
+            aValue = 0;
+
         AngleA = myscript.UpdateAngleA(aValue);
         AngleB = myscript.UpdateAngleB(bValue);
         configuration.setPosition(new Vector4(AngleA, AngleB, AngleC, AngleD));
@@ -60,12 +63,17 @@ public class NewController : MonoBehaviour
     
     private void onInteriorMovement(InputAction.CallbackContext value)
     {
-        Debug.Log("on interior Movement");
         Vector2 inputMovement = value.ReadValue<Vector2>();
         float dValue = inputMovement.x * joystickSensitivity;
         float cValue = inputMovement.y * joystickSensitivity;
-        AngleD = myscript.UpdateAngleD(dValue);
-        AngleC = myscript.UpdateAngleC(cValue);
+        if(Math.Abs(dValue) > Math.Abs(cValue)) //only move one flap at a time
+            cValue = 0;
+        else
+            dValue = 0;
+        AngleD = Math.Abs(dValue) > .01? myscript.UpdateAngleD(dValue) : myscript.UpdateAngleD(0); //@FIXME could be updating with a value of 0 or nah idk
+        AngleC = Math.Abs(cValue) > .01 ? myscript.UpdateAngleC(cValue) : myscript.UpdateAngleC(0);
+
+
         configuration.setPosition(new Vector4(AngleA, AngleB, AngleC, AngleD));
     }
 }
