@@ -634,6 +634,8 @@ public class MyScript : MonoBehaviour
         findNormals();
         createHingeTrackers();
         myStack1.Add(faceABCD); //abcd should always be on stack1
+
+        
        
     }
 
