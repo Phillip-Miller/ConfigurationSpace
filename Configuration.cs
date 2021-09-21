@@ -151,9 +151,22 @@ public class Configuration : MonoBehaviour
     public void setPosition(Vector4 currentDegValues) //will use set instead of update to avoid creep over time
     {
         //degrees (A,B,C,D) (xyzw)
+        print("CURRENT DEG VALUES: " + currentDegValues);
         checkConfig(currentDegValues); 
         Vector4 xyzwDistances = currentDegValues * UNITS_PER_DEGREE;
-        float CDVector = (activeConfig == DNotDC ? xyzwDistances.w : xyzwDistances.z); //Y axis changes based off which configuration space we are in
+        float CDVector;
+        if (activeConfig.Equals(cNotDD))//Y axis changes based off which configuration space we are in
+        {
+            CDVector = xyzwDistances.w;
+            
+           // print("Changing cd vector" + CDVector * (axisCEnd - configurationSpaceOrigin).normalized);
+
+        }
+        else
+        {
+            CDVector = xyzwDistances.z;
+        }
+       // print("CD VECTOR: " + CDVector);
         Vector3 finalLocation = configurationSpaceOrigin + xyzwDistances.x * (axisAEnd - configurationSpaceOrigin).normalized +
                                                             xyzwDistances.y*(axisBEnd - configurationSpaceOrigin).normalized + 
                                                             CDVector*(axisCEnd - configurationSpaceOrigin).normalized;
@@ -161,20 +174,20 @@ public class Configuration : MonoBehaviour
     }
     public void checkConfig(Vector4 currrentDegValues)
     {
-        //@FIXME this method is broken
+
         if(currrentDegValues.z > 180 && activeConfig != DNotDC)
         {
             Debug.Log("Switching to DNOTDC");
             switchConfig(DNotDC);
 
         }
-        else if (currrentDegValues.z < 0 && activeConfig != cNotDD)
+        else if (currrentDegValues.w > 180 && activeConfig != cNotDD)
         {
             Debug.Log("Switching to CNOTDD");
             switchConfig(cNotDD);
 
         }
-        else if (activeConfig != this.gameObject)// 0< c <180
+        else if (currrentDegValues.z >= 0 && currrentDegValues.z <= 180 && activeConfig != this.gameObject && currrentDegValues.w != 0)// 0< c <180
         {
             Debug.Log("Switching to CDD");
             switchConfig(this.gameObject);
